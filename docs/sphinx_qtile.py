@@ -51,6 +51,10 @@ qtile_class_template = Template('''
     .. compound::
 
         Supported bar orientations: {{ obj.orientations }}
+
+        {% if unsupported_backends %}
+        Supported backends: {{ ", ".join(obj.supported_backends) }}
+        {% endif %}
     {% endif %}
     {% if configurable %}
     .. list-table::
@@ -108,6 +112,7 @@ class QtileClass(SimpleDirectiveMixin, Directive):
         obj = import_class(module, class_name)
         is_configurable = ':no-config:' not in arguments
         is_commandable = ':no-commands:' not in arguments
+        is_widget = issubclass(obj, widget.base._Widget)
         arguments = [i for i in arguments if i not in (':no-config:', ':no-commands:')]
 
         # build up a dict of defaults using reverse MRO
@@ -136,8 +141,9 @@ class QtileClass(SimpleDirectiveMixin, Directive):
             'defaults': defaults,
             'configurable': is_configurable and issubclass(obj, configurable.Configurable),
             'commandable': is_commandable and issubclass(obj, command.base.CommandObject),
-            'is_widget': issubclass(obj, widget.base._Widget),
+            'is_widget': is_widget,
             'extra_arguments': arguments,
+            'unsupported_backends': is_widget and obj.supported_backends != widget.base._Widget.supported_backends
         }
         if context['commandable']:
             context['commands'] = [

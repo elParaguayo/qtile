@@ -100,8 +100,6 @@ class Systray(window._Window, base._Widget):
         If using this widget it is therefore recommended to use
         a fully opaque background colour or a fully transparent
         one.
-
-    Available on X11 backend only.
     """
 
     _window_mask = EventMask.StructureNotify | \
