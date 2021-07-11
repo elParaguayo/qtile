@@ -100,12 +100,16 @@ class Systray(window._Window, base._Widget):
         If using this widget it is therefore recommended to use
         a fully opaque background colour or a fully transparent
         one.
+
+    Available on X11 backend only.
     """
 
     _window_mask = EventMask.StructureNotify | \
         EventMask.Exposure
 
     orientations = base.ORIENTATION_HORIZONTAL
+
+    supported_backends = ["x11"]
 
     defaults = [
         ('icon_size', 20, 'Icon width'),

@@ -112,6 +112,7 @@ class _Widget(CommandObject, configurable.Configurable):
     to the passed dictionary.
     """
     orientations = ORIENTATION_BOTH
+    supported_backends = ["x11", "wayland"]
     offsetx: int = 0
     offsety: int = 0
     defaults = [
