@@ -29,13 +29,16 @@ class PopupMenuItem(PopupText):
         ("menu_icon", None, "Optional icon to display next to text"),
         ("icon_size", 12, "Size of menu icon"),
         ("icon_gap", 5, "Gap between icon and text"),
-        ("show_icon", True, "Show menu icons")
+        ("show_icon", True, "Show menu icons"),
+        ("toggle_box", False, "Whether to show a toggle box"),
+        ("toggled", False, "Whether toggle box is toggled")
     ]
 
     def __init__(self, text="", **config):
+        logger.warning(f"{config=}")
         PopupText.__init__(self, text, **config)
         self.add_defaults(PopupMenuItem.defaults)
-        if self.menu_icon:
+        if self.menu_icon and not self.toggle_box:
             self.load_icon(self.menu_icon)
         else:
             self.icon = None
@@ -71,6 +74,15 @@ class PopupMenuItem(PopupText):
 
         offset = 0
 
+        if self.toggle_box:
+            self.drawer.ctx.save()
+            self.drawer.ctx.translate(0, int((self.height - self.icon_size) / 2) - 1)
+            self.drawer.set_source_rgb(self.foreground)
+            self.drawer.rectangle(0, 0, self.icon_size, self.icon_size, 1)
+            if self.toggled:
+                self.drawer.fillrect(3, 3, self.icon_size - 6, self.icon_size - 6)
+            self.drawer.ctx.restore()
+
         if self.icon and self.show_icon:
             self.drawer.ctx.save()
             self.drawer.ctx.translate(0, int((self.height - self.icon.height) / 2))
@@ -78,7 +90,7 @@ class PopupMenuItem(PopupText):
             self.drawer.ctx.paint()
             self.drawer.ctx.restore()
         
-        if self.show_icon:
+        if self.show_icon or self.toggle_box:
             offset = self.icon_size + self.icon_gap
 
         self.drawer.ctx.save()
@@ -152,7 +164,9 @@ class PopupMenu(PopupGridLayout):
                         font_size=config["fontsize"],
                         foreground=config["foreground"],
                         highlight=config["highlight"],
-                        show_icon=config["show_menu_icons"]
+                        show_icon=config["show_menu_icons"],
+                        toggle_box=True if dbmitem.toggle_type else False,
+                        toggled=True if dbmitem.toggle_state else False
                     )
                 )
             prev_sep = sep
