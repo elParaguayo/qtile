@@ -19,6 +19,7 @@
 # SOFTWARE.
 
 import asyncio
+import os
 import time
 from functools import partial
 from typing import Callable, List, Optional
@@ -28,6 +29,7 @@ import cairocffi
 try:
     from dbus_next import (
         InterfaceNotFoundError,
+        InvalidBusNameError,
         InvalidIntrospectionError,
         Variant,
     )
@@ -86,7 +88,7 @@ if has_dbus:
     class DBusMenuItem:  # noqa: E303
         """Simple class definition to represent a DBus Menu item."""
         def __init__(self, menu, id: int, item_type: Optional[str] = "",
-                     enabled: Optional[bool] = False, visible: Optional[bool] = False,
+                     enabled: Optional[bool] = True, visible: Optional[bool] = True,
                      icon_name: Optional[str] = "", icon_data: Optional[List[bytes]] = list(),
                      shortcut: Optional[List[List[str]]] = list(), label: Optional[str] = "",
                      toggle_type: Optional[str] = "", toggle_state: Optional[int] = 0,
@@ -133,7 +135,8 @@ if has_dbus:
             ("icon-name", "icon_name"),
             ("icon-data", "icon_data"),
             ("toggle-state", "toggle_state"),
-            ("children-display", "children_display")
+            ("children-display", "children_display"),
+            ("toggle-type", "toggle_type")
         ]
 
         def __init__(self, parent, service: str, path: str, bus: Optional[MessageBus] = None):
@@ -302,7 +305,9 @@ if has_dbus:
             "Overlay": ("_overlay_icon", "get_overlay_icon_pixmap")
         }
 
-        def __init__(self, bus, service, display_menu_callback=None, icon_theme=None):
+        def __init__(self, bus, service, path=None,
+                     display_menu_callback=None,
+                     icon_theme=None):
             self.bus = bus
             self.service = service
             self.surfaces = {}
@@ -315,7 +320,8 @@ if has_dbus:
             self.display_menu_callback = display_menu_callback
             self.icon_theme = icon_theme
             self.menu = None
-            self.xdg_icon = None
+            self.icon = None
+            self.path = path if path else STATUSNOTIFIER_PATH
 
         def __eq__(self, other):
             # Convenience method to find Item in list by service path
@@ -328,11 +334,22 @@ if has_dbus:
 
         async def start(self):
             # Create a proxy object connecting for the item.
-            obj = self.bus.get_proxy_object(
-                self.service,
-                STATUSNOTIFIER_PATH,
-                SCHEMA_STATUS_NOTIFIER_ITEM
-            )
+            if self.path == STATUSNOTIFIER_PATH:
+                introspection = SCHEMA_STATUS_NOTIFIER_ITEM
+            else:
+                introspection = await self.bus.introspect(
+                    self.service,
+                    self.path
+                )
+
+            try:
+                obj = self.bus.get_proxy_object(
+                    self.service,
+                    self.path,
+                    introspection
+                )
+            except InvalidBusNameError:
+                return False
 
             # Try to connect to the bus object and verify there's a valid
             # interface available
@@ -352,7 +369,10 @@ if has_dbus:
                 return False
 
             # Check if the default action for this item should be to show a context menu
-            self.is_context_menu = await self.item.get_item_is_menu()
+            try:
+                self.is_context_menu = await self.item.get_item_is_menu()
+            except AttributeError:
+                self.is_context_menu = False
 
             # Get the path of the attached menu
             menu_path = await self.item.get_menu()
@@ -364,10 +384,18 @@ if has_dbus:
 
             # Default to XDG icon:
             icon_name = await self.item.get_icon_name()
-            self._get_xdg_icon(icon_name)
+
+            try:
+                icon_path = await self.item.get_icon_theme_path()
+                self.icon = self._get_custom_icon(icon_name, icon_path)
+            except AttributeError:
+                pass
+            
+            if not self.icon:
+                self.icon = self._get_xdg_icon(icon_name)
 
             # If there's no XDG icon, try to use icon provided by application
-            if self.xdg_icon is None:
+            if self.icon is None:
 
                 # Get initial application icons:
                 for icon in ["Icon", "Attention", "Overlay"]:
@@ -395,6 +423,14 @@ if has_dbus:
             task = asyncio.create_task(self._get_icon("Overlay"))
             task.add_done_callback(self._redraw)
 
+        def _get_custom_icon(self, icon_name, icon_path):
+            for ext in [".png", ".svg"]:
+                path = os.path.join(icon_path, icon_name + ext)
+                if os.path.isfile(path):
+                    return Img.from_path(path)
+
+            return None
+
         def _get_xdg_icon(self, icon_name):
             if not has_xdg:
                 return
@@ -405,7 +441,7 @@ if has_dbus:
             if not path:
                 return None
 
-            self.xdg_icon = Img.from_path(path)
+            return Img.from_path(path)
 
         async def _get_icon(self, icon_name):
             """
@@ -488,8 +524,8 @@ if has_dbus:
                 size
             )
 
-            if self.xdg_icon:
-                base_icon = self.xdg_icon.surface
+            if self.icon:
+                base_icon = self.icon.surface
                 icon_size = base_icon.get_width()
                 overlay = None
 
@@ -549,7 +585,7 @@ if has_dbus:
 
         @property
         def has_icons(self):
-            return any(bool(icon) for icon in self._pixmaps.values()) or self.xdg_icon is not None
+            return any(bool(icon) for icon in self._pixmaps.values()) or self.icon is not None
 
 
     class StatusNotifierWatcher(ServiceInterface):  # noqa: E303
@@ -571,6 +607,7 @@ if has_dbus:
         async def start(self):
             # Set up and register the service on ths bus
             self.bus = await MessageBus().connect()
+            self.bus.add_message_handler(self._message_handler)
             self.bus.export('/StatusNotifierWatcher', self)
             await self.bus.request_name(self.service)
 
@@ -578,6 +615,26 @@ if has_dbus:
             # the bus so we can remove icons when the application
             # is closed.
             await self._setup_listeners()
+
+        def _message_handler(self, message):
+            """
+            Low level method to check incoming messages.
+
+            Ayatana indicators seem to register themselves by passing their object
+            path rather than the service providing that object. We therefore need to
+            identify the sender of the message in order to register the service.
+            """
+            if message.member != "RegisterStatusNotifierItem":
+                return False
+
+            # If the argument passed to the method is the service name then we
+            # don't need to do anything else.
+            if message.sender == message.body[0]:
+                return False
+
+            self._items.append(message.sender)
+            self.on_item_added(message.sender, message.body[0])
+            return True
 
         async def _setup_listeners(self):
             """
@@ -694,12 +751,13 @@ if has_dbus:
                 self.items.append(item)
                 self.widget.bar.draw()
 
-        def add_item(self, service):
+        def add_item(self, service, path=None):
             """
             Creates a StatusNotifierItem for the given service and tries to
             start it.
             """
             item = StatusNotifierItem(self.bus, service,
+                                      path=path,
                                       display_menu_callback=self.display_menu_callback,
                                       icon_theme=self.icon_theme)
             item.on_icon_changed = self.widget.bar.draw
