@@ -112,6 +112,7 @@ class Core(base.Core):
             | EventMask.ButtonPress
         )
         self._root.set_attribute(eventmask=self.eventmask)
+        # self.conn.xinput.select_events(self._root.wid, XIEventMask.BarrierHit)
 
         self._root.set_property(
             "_NET_SUPPORTED", [self.conn.atoms[x] for x in xcbq.SUPPORTED_ATOMS]
@@ -161,6 +162,13 @@ class Core(base.Core):
             | xcbq.AllButtonsMask
             | xcbq.PointerMotionHintMask
         )
+
+        # Add pointer barriers (these lines should be moved later on)
+        if hasattr(self.conn, "xinputextension"):
+            self.conn.xinputextension.select_events(self._root.wid)
+
+        if hasattr(self.conn, "xfixes"):
+            self.conn.xfixes.add_pointer_barrier(self._root.wid, 600, 0, 600, 1080)  # hardcoded for testing
 
     @property
     def name(self):
@@ -734,6 +742,11 @@ class Core(base.Core):
 
     def handle_ScreenChangeNotify(self, event) -> None:  # noqa: N802
         hook.fire("screen_change", event)
+
+    def handle_GeGeneric(self, event):
+        # There is only one event that triggers this event so far - the BarrierHitEvent
+        # Just log a message for now to show that the event is being fired.
+        logger.warning("Barrier Hit")
 
     @contextlib.contextmanager
     def disable_unmap_events(self):
