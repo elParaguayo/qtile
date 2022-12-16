@@ -7,6 +7,7 @@ import traceback
 from itertools import islice
 from typing import TYPE_CHECKING
 
+import cairocffi
 import xcffib
 import xcffib.xproto
 from xcffib.wrappers import GContextID, PixmapID
@@ -464,14 +465,47 @@ class XWindow:
         core = self.conn.conn.core
         outer_w = width + borderwidth * 2
         outer_h = height + borderwidth * 2
+        vid = self.get_attributes().visual
+        root = self.conn.conn.get_setup().roots[0]
+
+        def find_visual(root, depth, visual):
+            for d in root.allowed_depths:
+                if d.depth == depth:
+                    for v in d.visuals:
+                        if v.visual_id == visual:
+                            return v
+
         with PixmapID(self.conn.conn) as border:
+            v = find_visual(root, depth, vid)
+            pid = self.conn.conn.generate_id()
+            self.conn.conn.core.CreatePixmap(depth, pid, self.wid, outer_w, outer_h)
+            surface = cairocffi.XCBSurface(self.conn.conn, pid, v, outer_w, outer_h)
+            ctx = cairocffi.Context(surface)
+            lg = cairocffi.LinearGradient(0, 0, width, height)
+            lg.add_color_stop_rgb(0, 1, 0, 0)
+            lg.add_color_stop_rgb(0.5, 0, 1, 0)
+            lg.add_color_stop_rgb(1, 0, 0, 1)
+            ctx.set_source(lg)
+            ctx.paint()
+            print(pid)
+            # gc = conn.generate_id()
+            # conn.core.CreateGC(
+            #     gc,
+            #     window,
+            #     xcffib.xproto.GC.Foreground | xcffib.xproto.GC.Background,
+            #     [
+            #         root.black_pixel,
+            #         root.white_pixel,
+            #     ],
+            # )
+
             core.CreatePixmap(depth, border, self.wid, outer_w, outer_h)
             most_w = outer_w - borderwidth
             most_h = outer_h - borderwidth
-            core.CopyArea(pixmap, border, gc, borderwidth, borderwidth, 0, 0, most_w, most_h)
-            core.CopyArea(pixmap, border, gc, 0, 0, most_w, most_h, borderwidth, borderwidth)
-            core.CopyArea(pixmap, border, gc, borderwidth, 0, 0, most_h, most_w, borderwidth)
-            core.CopyArea(pixmap, border, gc, 0, borderwidth, most_w, 0, borderwidth, most_h)
+            core.CopyArea(pid, border, gc, borderwidth, borderwidth, 0, 0, most_w, most_h)
+            core.CopyArea(pid, border, gc, 0, 0, most_w, most_h, borderwidth, borderwidth)
+            core.CopyArea(pid, border, gc, borderwidth, 0, 0, most_h, most_w, borderwidth)
+            core.CopyArea(pid, border, gc, 0, borderwidth, most_w, 0, borderwidth, most_h)
             core.ChangeWindowAttributes(self.wid, xcffib.xproto.CW.BorderPixmap, [border])
 
 
