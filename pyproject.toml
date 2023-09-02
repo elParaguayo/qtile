@@ -16,13 +16,7 @@ filterwarnings = [
 [tool.setuptools-git-versioning]
 enabled = true
 
-[tool.setuptools.dynamic]
-readme = {file = "README.md"}
-
 [project]
 name = "qtile"
 description = "A pure-Python tiling window manager."
-dynamic = ["version"]
-
-[project.scripts]
-qtile = "libqtile.scripts.main:main"
+dynamic = ["version", "readme"]
