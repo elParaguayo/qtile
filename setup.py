@@ -28,11 +28,45 @@
 # SOFTWARE.
 
 import importlib
+import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 from setuptools import setup
+from setuptools.command.build_ext import build_ext
+from setuptools.command.build_py import build_py
 from setuptools.command.install import install
+
+path = Path(__file__).parent.absolute()
+
+
+class BuildPyExtensions(build_py):
+    """Forces build_ext to run"""
+
+    def run(self):
+        self.run_command("build_ext")
+        build_py.run(self)
+
+
+class BuildWayland(build_ext):
+    """Builds Wayland FFI files from within build environment."""
+
+    def run(self):
+        sys.path.insert(0, path.as_posix())
+        python_path = ":".join(sys.path)
+        builder = path / "libqtile" / "backend" / "wayland" / "cffi" / "build.py"
+        subprocess.run(
+            ["python3", builder.resolve().as_posix()],
+            check=True,
+            cwd=path.resolve().as_posix(),
+            capture_output=True,
+            env={
+                "PYTHONPATH": python_path,
+                "PATH": "/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin",
+            },
+        )
+        build_ext.run(self)
 
 
 class CheckCairoXcb(install):
@@ -78,26 +112,8 @@ def can_import(module):
     return True
 
 
-def get_cffi_modules():
-    # Check we have cffi around. If not, none of these will get built.
-    if not can_import("cffi.pkgconfig"):
-        print("CFFI package is missing")
-        return
-
-    cffi_modules = []
-
-    # Wayland backend dependencies
-    if can_import("wlroots.ffi_build"):
-        cffi_modules.append("libqtile/backend/wayland/cffi/build.py:ffi")
-    else:
-        print("Failed to find pywlroots. Wayland backend dependencies not built.")
-
-    return cffi_modules
-
-
 setup(
-    cmdclass={"install": CheckCairoXcb},
+    cmdclass={"install": CheckCairoXcb, "build_ext": BuildWayland, "build_py": BuildPyExtensions},
     use_scm_version=True,
-    cffi_modules=get_cffi_modules(),
     include_package_data=True,
 )

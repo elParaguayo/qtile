@@ -3,6 +3,11 @@ from cffi import FFI
 
 from libqtile.backend.wayland.cffi import cairo_buffer, libinput
 
+
+import sys
+sys.stderr.write("IMPORTING WAYLAND BUILDER\n")
+sys.stderr.flush()
+
 SOURCE = "\n".join(
     [
         wlr.SOURCE,
