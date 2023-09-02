@@ -4,6 +4,7 @@ include README.rst
 include MANIFEST.in
 include CONTRIBUTING.md
 include _builder/*.py
+include libqtile/backend/wayland/_ffi*.so
 
 exclude .coveragerc
 exclude .pylintrc
