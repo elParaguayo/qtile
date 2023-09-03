@@ -56,16 +56,21 @@ class BuildWayland(build_ext):
         sys.path.insert(0, path.as_posix())
         python_path = ":".join(sys.path)
         builder = path / "libqtile" / "backend" / "wayland" / "cffi" / "build.py"
-        subprocess.run(
-            ["python3", builder.resolve().as_posix()],
-            check=True,
-            cwd=path.resolve().as_posix(),
-            capture_output=True,
-            env={
-                "PYTHONPATH": python_path,
-                "PATH": "/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin",
-            },
-        )
+        try:
+            subprocess.run(
+                ["python3", builder.resolve().as_posix()],
+                check=True,
+                cwd=path.resolve().as_posix(),
+                capture_output=True,
+                env={
+                    "PYTHONPATH": python_path,
+                    "PATH": "/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin",
+                },
+            )
+        except subprocess.CalledProcessError as e:
+            print(e.stdout)
+            print(e.stderr)
+            raise Exception
         build_ext.run(self)
 
 
