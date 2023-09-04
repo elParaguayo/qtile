@@ -1,6 +1,7 @@
 [build-system]
-requires = [ "setuptools>=41", "wheel", "setuptools-git-versioning<2", ]
+requires = [ "setuptools>=41", "wheel", "setuptools-git-versioning<2", "pywlroots"]
 build-backend = "setuptools.build_meta"
+backend-path = ["libqtile"]
 
 [tool.black]
 line-length = 98
@@ -26,6 +27,3 @@ dynamic = ["version"]
 
 [project.scripts]
 qtile = "libqtile.scripts.main:main"
-
-[project.optional-dependencies]
-wayland = ["pywlroots"]
