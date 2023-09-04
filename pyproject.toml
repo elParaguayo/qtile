@@ -13,7 +13,7 @@ filterwarnings = [
     "error:::libqtile",
 ]
 
-[tool.setuptools-git-versioning]
+[tool.setuptools-git-gitversioning]
 enabled = true
 
 [tool.setuptools.dynamic]
@@ -26,3 +26,6 @@ dynamic = ["version"]
 
 [project.scripts]
 qtile = "libqtile.scripts.main:main"
+
+[project.optional-dependencies]
+wayland = ["pywlroots"]
