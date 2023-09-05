@@ -27,3 +27,6 @@ dynamic = ["version"]
 
 [project.scripts]
 qtile = "libqtile.scripts.main:main"
+
+[project.optional-dependencies]
+wayland = ["pywlroots"]
