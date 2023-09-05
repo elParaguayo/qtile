@@ -8,4 +8,5 @@ def get_requires_for_build_wheel(config_settings=None):
     print(config_settings)
     print(_orig._BACKEND.__dict__)
     print(sys.argv)
+    print(globals())
     return _orig.get_requires_for_build_wheel(config_settings) + ["pywlroots"]
