@@ -94,18 +94,23 @@ class PulseConnection:
 
     async def _event_listener(self):
         """Listens for sink and server events from the server."""
+        logger.warning("Starting event listener...")
         async for event in self.pulse.subscribe_events("sink", "server"):
             # Sink events will signify volume changes
+            logger.warning(f"Got event: {event}")
             if event.facility == "sink":
                 await self.get_sink_info()
             # Server events include when the default sink changes
             elif event.facility == "server":
                 await self.get_server_info()
 
+        logger.warning("Event listener exited.")
+
     async def get_server_info(self):
         """Updates the default sink name."""
         info = await self.pulse.server_info()
         self.default_sink_name = info.default_sink_name
+        logger.warning(f"Setting default sink name: {self.default_sink_name}")
         await self.get_sink_info()
 
     async def get_sink_info(self):
@@ -113,8 +118,9 @@ class PulseConnection:
         sinks = [
             sink for sink in await self.pulse.sink_list() if sink.name == self.default_sink_name
         ]
+        logger.warning(f"Found sinks: {sinks}")
         if not sinks:
-            logger.warning("Cold not get info for default sink")
+            logger.warning("Could not get info for default sink")
             self.default_sink = None
             return
 
@@ -139,6 +145,8 @@ class PulseConnection:
 
     def update_clients(self):
         """Sends volume and mute status to subscribed clients."""
+        logger.warning("Sending callbacks.")
+        logger.warning(f"Updated volume and mute values: {self.get_volume()}")
         for callback in self.callbacks:
             callback(*self.get_volume())
 
@@ -149,10 +157,12 @@ class PulseConnection:
         The first subscription will trigger the connection to the
         pulse server.
         """
+        logger.warning("Subscribing callback")
         need_configure = not bool(self.callbacks)
         self.callbacks.append(callback)
 
         if need_configure:
+            logger.warning("Configuring pulse connection")
             create_task(self._configure())
 
     def unsubscribe(self, callback):
@@ -165,9 +175,11 @@ class PulseConnection:
         try:
             self.callbacks.remove(callback)
         except ValueError:
+            logger.exception("Failed to unsubscribe callback")
             pass
 
         if not self.callbacks:
+            logger.warning("Closing pulse connection")
             self.pulse.close()
 
             # Prevent future calls to connect to the server
@@ -211,6 +223,7 @@ class PulseVolume(Volume):
         Volume._configure(self, qtile, bar)
         if self.theme_path:
             self.setup_images()
+        logger.warning("Configuring widget - subscribing to pulse server")
         pulse.subscribe(self.get_vals)
 
     async def _change_volume(self, volume):
@@ -273,5 +286,6 @@ class PulseVolume(Volume):
 
     def finalize(self):
         # Close the connection to the server
+        logger.warning("Finalising pulse widget - unsubscribing...")
         pulse.unsubscribe(self.get_vals)
         Volume.finalize(self)
