@@ -178,8 +178,8 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
         include:
-          - python-version: "pypy-3.9"
-            manual-version: "pp3.9"
+          - python-version: "pypy-3.10"
+            manual-version: "pp3.10"
     steps:
       - name: Download wheels
         if: ${{ matrix.manual-version == '' }}
