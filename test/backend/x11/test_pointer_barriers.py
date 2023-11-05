@@ -59,6 +59,37 @@ def test_screen_focus(xmanager, conn):
 
     assert current_screen() == 0
 
+    m = xcffib.xproto.EventMask
+    mask = (
+        m.KeyPress
+        | m.KeyRelease
+        | m.ButtonPress
+        | m.ButtonRelease
+        | m.EnterWindow
+        | m.LeaveWindow
+        | m.PointerMotion
+        | m.PointerMotionHint
+        | m.Button1Motion
+        | m.Button2Motion
+        | m.Button3Motion
+        | m.Button4Motion
+        | m.Button5Motion
+        | m.ButtonMotion
+        | m.KeymapState
+        | m.Exposure
+        | m.VisibilityChange
+        | m.StructureNotify
+        | m.ResizeRedirect
+        | m.SubstructureNotify
+        | m.SubstructureRedirect
+        | m.FocusChange
+        | m.PropertyChange
+        | m.ColorMapChange
+        | m.OwnerGrabButton
+    )
+
+    print(mask)
+
     event = xcffib.xinput.BarrierHitEvent.synthetic(
         2,
         xcffib.xproto.Time.CurrentTime,
@@ -75,7 +106,7 @@ def test_screen_focus(xmanager, conn):
         (0, 0)
     )
 
-    conn.conn.core.SendEvent(False, conn.default_screen.root.wid, xcffib.xproto.EventMask.NoEvent, event.pack())
+    conn.conn.core.SendEvent(False, conn.default_screen.root.wid, mask, event.pack())
     conn.conn.flush()
     conn.xsync()
 
@@ -98,7 +129,7 @@ def test_screen_focus(xmanager, conn):
         (0, 0)
     )
 
-    conn.conn.core.SendEvent(False, conn.default_screen.root.wid, xcffib.xproto.EventMask.NoEvent, event.pack())
+    conn.conn.core.SendEvent(False, conn.default_screen.root.wid, mask, event.pack())
     conn.conn.flush()
     conn.xsync()
 
