@@ -813,6 +813,7 @@ class Core(base.Core):
 
     def handle_BarrierHit(self, event):
         """Warps pointer to other side of barrier and focuses the relevant screen."""
+        logger.warning("Barrier Hit!")
         barrier = self.conn.xfixes.barriers.get(event.barrier)
         if barrier is None:
             logger.warning("Unknown barrier hit event.")

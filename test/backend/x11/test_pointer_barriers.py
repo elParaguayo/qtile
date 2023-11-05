@@ -45,18 +45,62 @@ def test_screen_focus(xmanager, conn):
 
     assert current_screen() == 0
 
-    _, barriers = xmanager.c.eval("len(self.core.conn.xfixes.barriers.keys())")
+    _, barrier_key = xmanager.c.eval("list(self.core.conn.xfixes.barriers.keys())[0]")  # There's only one barrier in this configuration
+    barrier = int(barrier_key)
 
-    xtest = conn.conn(xcffib.xtest.key)
-    # Move to edge of barrier
-    xtest.FakeInput(6, 0, xcffib.xproto.Time.CurrentTime, conn.default_screen.root.wid, 799, 100, 0)
-    # Try to cross barrier
-    xtest.FakeInput(6, 1, xcffib.xproto.Time.CurrentTime, conn.default_screen.root.wid, 1, 0, 0)
+    # Code from actual event
+    # 2023-11-05 14:15:29,102 WARNING libqtile core.py:handle_BarrierHit():L816
+    # {'unpacker': <xcffib.CffiUnpacker object at 0x7fba2f0fe190>, 'response_type': 35, 'sequence': 2126, 'extension': 131,
+    # 'length': 9, 'event_type': 25, 'full_sequence': 2126, 'deviceid': 2, 'time': 4159579, 'eventid': 1, 'root': 1944,
+    # 'event': 1944, 'barrier': 4194628, 'dtime': 0, 'flags': 0, 'sourceid': 11, 'root_x': 54132736, 'root_y': 19660800, 
+    # 'dx': <xcffib.xinput.FP3232 object at 0x7fba2f0fea90>, 'dy': <xcffib.xinput.FP3232 object at 0x7fba2f0fe0d0>, 'bufsize': 62}
+
+    # BarrierHitEvent.synthetic(deviceid, time, eventid, root, event, barrier, dtime, flags, sourceid, root_x, root_y, dx, dy)
+
+    assert current_screen() == 0
+
+    event = xcffib.xinput.BarrierHitEvent.synthetic(
+        2,
+        xcffib.xproto.Time.CurrentTime,
+        1,
+        conn.default_screen.root.wid,
+        conn.default_screen.root.wid,
+        barrier,
+        0,
+        0,
+        11,
+        799 << 16,
+        100 << 16,
+        (0, 0),
+        (0, 0)
+    )
+
+    conn.conn.core.SendEvent(False, conn.default_screen.root.wid, xcffib.xproto.EventMask.NoEvent, event.pack())
     conn.conn.flush()
     conn.xsync()
 
     # Second screen should now be focused
     assert current_screen() == 1
 
-    # For some reason, FakeInput hits barrier in opposite direction but no barrierhit event is fired :(
-    # So we can't include that part of the test here.
+    event = xcffib.xinput.BarrierHitEvent.synthetic(
+        2,
+        xcffib.xproto.Time.CurrentTime,
+        1,
+        conn.default_screen.root.wid,
+        conn.default_screen.root.wid,
+        barrier,
+        0,
+        0,
+        11,
+        800 << 16,
+        100 << 16,
+        (0, 0),
+        (0, 0)
+    )
+
+    conn.conn.core.SendEvent(False, conn.default_screen.root.wid, xcffib.xproto.EventMask.NoEvent, event.pack())
+    conn.conn.flush()
+    conn.xsync()
+
+    # Second screen should now be focused
+    assert current_screen() == 0
