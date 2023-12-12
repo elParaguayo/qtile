@@ -9,8 +9,10 @@ Nevertheless, both backends do contain important commands, notably `set_keymap` 
 
 The backend core has no access to other nodes on the command graph.
 
-.. qtile_graph::
-    :root: core
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("core"))
+```
 
 |
 

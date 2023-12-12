@@ -7,8 +7,10 @@ commands are somewhat more limited in scope.
 Groups have access to the layouts in that group, the windows in the group and
 the screen displaying the group.
 
-.. qtile_graph::
-    :root: group
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("group"))
+```
 
 |
 

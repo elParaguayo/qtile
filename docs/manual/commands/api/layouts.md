@@ -6,8 +6,10 @@ typically include moving windows around the layout and changing the size of wind
 Layouts can access the windows being displayed, the group holding the layout and
 the screen displaying the layout.
 
-.. qtile_graph::
-    :root: layout
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("layout"))
+```
 
 |
 

@@ -7,8 +7,10 @@ fullscreen, opacity).
 Windows can access objects relevant to the display of the window (i.e.
 the screen, group and layout).
 
-.. qtile_graph::
-    :root: window
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("window"))
+```
 
 |
 

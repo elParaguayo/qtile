@@ -4,12 +4,8 @@
     :baseclass: libqtile.widget.base._Widget
     :exclude: Mirror -->
 
-::: libqtile.widget
-    options:
-        heading_level: 2
-        show_root_heading: false
-        show_root_toc_entry: false
-        summary:
-            functions: true
-            attributes: true
-            classes: true
+```python exec="1"
+from docs.qtile_docs.module import qtile_module
+
+print(qtile_module("libqtile.widget", "libqtile.widget.base._Widget", exclude="Mirror"))
+```

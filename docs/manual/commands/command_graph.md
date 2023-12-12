@@ -8,9 +8,10 @@ basic components of the window manager: `layouts`, `windows`, `groups`,
 Objects are addressed by a path specification that starts at the root and
 follows the available paths in the graph. This is what the graph looks like:
 
-.. qtile_graph::
-    :root: all
-    :api_page_root: api/
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph(api_page_root="../api/"))
+```
 
 Each arrow can be read as "holds a reference to". So, we can see that a
 `widget` object *holds a reference to* objects of type `bar`, `screen`

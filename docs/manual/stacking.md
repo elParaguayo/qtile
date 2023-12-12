@@ -6,10 +6,11 @@ the stacking order of windows.
 
 The aim of this page is to provide more details as to how stacking is implemented in Qtile.
 
-.. important::
+!!! note
 
     Currently, stacking is only implemented in the X11 background. Support will be added to the
     Wayland backend in future and this page will be updated accordingly.
+
 
 Layer priority groups
 ~~~~~~~~~~~~~~~~~~~~~

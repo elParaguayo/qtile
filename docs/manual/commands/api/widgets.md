@@ -6,8 +6,13 @@ triggered indirectly (e.g. via a keypress).
 
 Widgets can access the parent bar and screen via the command graph.
 
-.. qtile_graph::
-    :root: widget
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+from docs.qtile_docs.commands import qtile_commands
+print(qtile_graph("widget"))
+
+print(qtile_commands("libqtile.widget", baseclass="libqtile.widget.base._Widget", object_node="widget", object_selector_name=True))
+```
 
 |
 

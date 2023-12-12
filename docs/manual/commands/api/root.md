@@ -7,8 +7,10 @@ The root can access every other node in the command graph. Certain objects
 can be accessed without a selector resulting in the current object being
 selected (e.g. current group, screen, layout, window).
 
-.. qtile_graph::
-    :root: root
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("root"))
+```
 
 |
 

@@ -6,8 +6,10 @@ include changing the current group and changing the wallpaper.
 Screens can access objects displayed on that screen e.g. bar, widgets, groups, layouts
 and windows.
 
-.. qtile_graph::
-    :root: screen
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("screen"))
+```
 
 |
 

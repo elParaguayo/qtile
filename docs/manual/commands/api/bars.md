@@ -10,8 +10,12 @@ default bar). The selector is the position of the bar on the screen i.e. "top",
 The bar can access the screen it's on and the widgets it contains via the command
 graph.
 
-.. qtile_graph::
-    :root: bar
+```python exec="1"
+from docs.qtile_docs.graph import qtile_graph
+print(qtile_graph("bar"))
+```
+
+::: libqtile.bar.Bar
 
 .. qtile_commands:: libqtile.bar
     :object-node: bar
