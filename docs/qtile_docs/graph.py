@@ -20,7 +20,6 @@
 from dataclasses import dataclass
 
 from docs.qtile_docs.templates import qtile_graph_template
-
 from libqtile.command import graph
 
 DISABLED_FILL_COLOUR = "LightGray"

@@ -23,10 +23,7 @@ import inspect
 
 from docs.qtile_docs.qtile_class import qtile_class
 from docs.qtile_docs.templates import qtile_module_template
-
-
 from libqtile.utils import import_class
-
 
 # class QtileModule:
 #     optional_arguments = 3

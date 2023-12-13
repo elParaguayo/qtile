@@ -20,16 +20,16 @@ the `client_new` hook to tell us when a new window has opened and, if the
 type is "dialog", as can set the window to float. In our configuration file it
 would look something like this:
 
-.. code-block:: python
+```py
+from libqtile import hook
 
-    from libqtile import hook
-
-    @hook.subscribe.client_new
-    def floating_dialogs(window):
-        dialog = window.window.get_wm_type() == 'dialog'
-        transient = window.window.get_wm_transient_for()
-        if dialog or transient:
-            window.floating = True
+@hook.subscribe.client_new
+def floating_dialogs(window):
+    dialog = window.window.get_wm_type() == 'dialog'
+    transient = window.window.get_wm_transient_for()
+    if dialog or transient:
+        window.floating = True
+```
 
 A list of available hooks can be found in the
 :ref:`Built-in Hooks <ref-hooks>` reference.
@@ -54,17 +54,17 @@ that it can be executed.
 
 We can then subscribe to `startup_once` to run this script:
 
-.. code-block:: python
+```py
+import os
+import subprocess
 
-    import os
-    import subprocess
+from libqtile import hook
 
-    from libqtile import hook
-
-    @hook.subscribe.startup_once
-    def autostart():
-        home = os.path.expanduser('~/.config/qtile/autostart.sh')
-        subprocess.Popen([home])
+@hook.subscribe.startup_once
+def autostart():
+    home = os.path.expanduser('~/.config/qtile/autostart.sh')
+    subprocess.Popen([home])
+```
 
 Accessing the qtile object
 --------------------------
@@ -72,9 +72,9 @@ Accessing the qtile object
 If you want to do something with the `Qtile` manager instance inside a hook,
 it can be imported into your config:
 
-.. code-block:: python
-
-    from libqtile import qtile
+```py
+from libqtile import qtile
+```
 
 Async hooks
 -----------
@@ -82,8 +82,8 @@ Async hooks
 Hooks can also be defined as coroutine functions using `async def`, which
 will run them asynchronously in the event loop:
 
-.. code-block:: python
-
-    @hook.subscribe.focus_change
-    async def _():
-        ...
+```py
+@hook.subscribe.focus_change
+async def _():
+    ...
+```

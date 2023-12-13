@@ -24,7 +24,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from docs.qtile_docs.templates import qtile_class_template
-
 from libqtile import command, configurable, widget
 from libqtile.utils import import_class
 

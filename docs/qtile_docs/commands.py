@@ -22,7 +22,6 @@ import importlib
 import inspect
 
 from docs.qtile_docs.templates import qtile_commands_template
-
 from libqtile import command
 from libqtile.utils import import_class
 

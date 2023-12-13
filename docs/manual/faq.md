@@ -83,81 +83,81 @@ groups between screens. For example if you want groups `"1"`, `"2"` and
 `"3"` on one screen and `"q"`, `"w"`, and `"e"` on the other, instead
 of binding keys to `lazy.group[name].toscreen()`, use this:
 
-.. code-block:: python
+``` py
+groups = [
+    # Screen affinity here is used to make
+    # sure the groups startup on the right screens
+    Group(name="1", screen_affinity=0),
+    Group(name="2", screen_affinity=0),
+    Group(name="3", screen_affinity=0),
+    Group(name="q", screen_affinity=1),
+    Group(name="w", screen_affinity=1),
+    Group(name="e", screen_affinity=1),
+]
 
-    groups = [
-        # Screen affinity here is used to make
-        # sure the groups startup on the right screens
-        Group(name="1", screen_affinity=0),
-        Group(name="2", screen_affinity=0),
-        Group(name="3", screen_affinity=0),
-        Group(name="q", screen_affinity=1),
-        Group(name="w", screen_affinity=1),
-        Group(name="e", screen_affinity=1),
-    ]
+def go_to_group(name: str):
+    def _inner(qtile):
+        if len(qtile.screens) == 1:
+            qtile.groups_map[name].toscreen()
+            return
 
-    def go_to_group(name: str):
-        def _inner(qtile):
-            if len(qtile.screens) == 1:
-                qtile.groups_map[name].toscreen()
-                return
+        if name in '123':
+            qtile.focus_screen(0)
+            qtile.groups_map[name].toscreen()
+        else:
+            qtile.focus_screen(1)
+            qtile.groups_map[name].toscreen()
 
-            if name in '123':
-                qtile.focus_screen(0)
-                qtile.groups_map[name].toscreen()
-            else:
-                qtile.focus_screen(1)
-                qtile.groups_map[name].toscreen()
+    return _inner
 
-        return _inner
-
-    for i in groups:
-        keys.append(Key([mod], i.name, lazy.function(go_to_group(i.name))))
+for i in groups:
+    keys.append(Key([mod], i.name, lazy.function(go_to_group(i.name))))
+```
         
 To be able to move windows across these groups which switching groups, a similar function can be used:
 
-.. code-block:: python
-    
-    def go_to_group_and_move_window(name: str):
-        def _inner(qtile):
-            if len(qtile.screens) == 1:
-                qtile.current_window.togroup(name, switch_group=True)
-                return
+``` py
+def go_to_group_and_move_window(name: str):
+    def _inner(qtile):
+        if len(qtile.screens) == 1:
+            qtile.current_window.togroup(name, switch_group=True)
+            return
 
-            if name in "123":
-                qtile.current_window.togroup(name, switch_group=False)
-                qtile.focus_screen(0)
-                qtile.groups_map[name].toscreen()
-            else:
-                qtile.current_window.togroup(name, switch_group=False)
-                qtile.focus_screen(1)
-                qtile.groups_map[name].toscreen()
+        if name in "123":
+            qtile.current_window.togroup(name, switch_group=False)
+            qtile.focus_screen(0)
+            qtile.groups_map[name].toscreen()
+        else:
+            qtile.current_window.togroup(name, switch_group=False)
+            qtile.focus_screen(1)
+            qtile.groups_map[name].toscreen()
 
-        return _inner
+    return _inner
 
-    for i in groups:
-        keys.append(Key([mod, "shift"], i.name, lazy.function(go_to_group_and_move_window(i.name))))
+for i in groups:
+    keys.append(Key([mod, "shift"], i.name, lazy.function(go_to_group_and_move_window(i.name))))
+```
 
 If you use the `GroupBox` widget you can make it reflect this behaviour:
 
-.. code-block:: python
-
-    groupbox1 = widget.GroupBox(visible_groups=['1', '2', '3'])
-    groupbox2 = widget.GroupBox(visible_groups=['q', 'w', 'e'])
+```py
+groupbox1 = widget.GroupBox(visible_groups=['1', '2', '3'])
+groupbox2 = widget.GroupBox(visible_groups=['q', 'w', 'e'])
+```
 
 And if you jump between having single and double screens then modifying the
 visible groups on the fly may be useful:
 
-.. code-block:: python
-
-   @hook.subscribe.screens_reconfigured
-   async def _():
-       if len(qtile.screens) > 1:
-           groupbox1.visible_groups = ['1', '2', '3']
-       else:
-           groupbox1.visible_groups = ['1', '2', '3', 'q', 'w', 'e']
-       if hasattr(groupbox1, 'bar'):
-           groupbox1.bar.draw()
+```py
+@hook.subscribe.screens_reconfigured
+async def _():
+    if len(qtile.screens) > 1:
+        groupbox1.visible_groups = ['1', '2', '3']
+    else:
+        groupbox1.visible_groups = ['1', '2', '3', 'q', 'w', 'e']
+    if hasattr(groupbox1, 'bar'):
+        groupbox1.bar.draw()
+```
 
 Where can I find example configurations and other scripts?
 ==========================================================
@@ -209,13 +209,13 @@ You can use `"QTILE_INTERNAL:32c = 1"` in your picom.conf to match the bar.
 This will match all internal Qtile windows, so if you want to avoid that or to
 target bars individually, you can set a custom property and match that:
 
-.. code-block:: python
+```py
+mybar = Bar(...)
 
-   mybar = Bar(...)
-
-   @hook.subscribe.startup
-   def _():
-       mybar.window.window.set_property("QTILE_BAR", 1, "CARDINAL", 32)
+@hook.subscribe.startup
+def _():
+    mybar.window.window.set_property("QTILE_BAR", 1, "CARDINAL", 32)
+```
 
 This would enable matching on `mybar`'s window using `"QTILE_BAR:32c = 1"`.
 See `2526`_ and `1515`_ for more discussion.

@@ -139,14 +139,14 @@ traversing by accessing properties and performing key lookups.
 Returning to our examples above, we now have the full context to see what is
 going on when we call:
 
-.. code-block:: python
-
-    from libqtile.command.client import CommandClient
-    c = CommandClient()
-    print(c.call("status")())
-    from libqtile.command.client import InteractiveCommandClient
-    c = InteractiveCommandClient()
-    print(c.status())
+```py
+from libqtile.command.client import CommandClient
+c = CommandClient()
+print(c.call("status")())
+from libqtile.command.client import InteractiveCommandClient
+c = InteractiveCommandClient()
+print(c.status())
+```
 
 In both cases, the command clients are constructed with the default command
 interface, which sets up an IPC connection to the running Qtile instance, and
