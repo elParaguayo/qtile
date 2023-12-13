@@ -148,14 +148,14 @@ The following examples show how to run tests locally:
      run a specific test file or even a specific test within that file with
      the following commands:
 
-     .. code-block:: bash
-
-        tox -e test # Run all tests in default python version
-        tox -e test -- -x test/widgets/test_widgetbox.py  # run a single file
-        tox -e test -- -x test/widgets/test_widgetbox.py::test_widgetbox_widget
-        tox -e test -- --backend=wayland --backend=x11  # run tests on both backends
-        tox -e test-both  # same as above 
-        tox -e test-wayland  # Just run tests on wayland backend
+     ``` bash
+     tox -e test # Run all tests in default python version
+     tox -e test -- -x test/widgets/test_widgetbox.py  # run a single file
+     tox -e test -- -x test/widgets/test_widgetbox.py::test_widgetbox_widget
+     tox -e test -- --backend=wayland --backend=x11  # run tests on both backends
+     tox -e test-both  # same as above
+     tox -e test-wayland  # Just run tests on wayland backend
+     ```
 
    * To run style and building checks, use `tox -e docs,packaging,pep8,...`.
      You can use `-p auto` to run the environments in parallel.

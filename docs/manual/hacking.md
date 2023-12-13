@@ -36,10 +36,10 @@ The test suite can be run using the X11 or Wayland backend, or both.  By
 default, only the X11 backend is used for tests. To test a single backend or
 both backends, specify as arguments to pytest:
 
-.. code-block:: bash
-
-    pytest --backend wayland  # Test just Wayland backend
-    pytest --backend x11 --backend wayland  # Test both
+``` bash
+pytest --backend wayland  # Test just Wayland backend
+pytest --backend x11 --backend wayland  # Test both
+```
 
 Testing with the X11 backend requires Xephyr_ (and xvfb for headless mode) in addition to the core
 dependencies.
@@ -54,9 +54,9 @@ built at run time and will have to be generated manually when the code is
 downloaded or when any changes are made to the cffi library.  This can be done
 by calling:
 
-.. code-block:: bash
-
-    ./scripts/ffibuild
+``` bash
+./scripts/ffibuild
+```
 
 Setting up the environment
 ==========================
@@ -202,17 +202,17 @@ It's likely though that you want to use a different, customized startup script
 for testing purposes, for example `~/.config/qtile/xinitrc`. You can do so by
 launching X with:
 
-.. code-block:: bash
-
-  startx ~/.config/qtile/xinitrc
+``` bash
+startx ~/.config/qtile/xinitrc
+```
 
 `startx` deals with multiple X sessions automatically. If you want to use
 `xinit` instead, you need to first copy `/etc/X11/xinit/xserverrc` to
 `~/.xserverrc`; when launching it, you have to specify a new session number:
 
-.. code-block:: bash
-
-  xinit ~/.config/qtile/xinitrc -- :1
+``` bash
+xinit ~/.config/qtile/xinitrc -- :1
+```
 
 Examples of custom X startup scripts are available in `qtile-examples
 <https://github.com/qtile/qtile-examples>`_.

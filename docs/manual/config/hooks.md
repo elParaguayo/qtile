@@ -46,11 +46,11 @@ Let's create an executable file `~/.config/qtile/autostart.sh` that will
 start a few programs when Qtile first runs. Remember to `chmod +x ~/.config/qtile/autostart.sh` so
 that it can be executed.
 
-.. code-block:: bash
-
-    #!/bin/sh
-    pidgin &
-    dropbox start &
+``` bash
+#!/bin/sh
+pidgin &
+dropbox start &
+```
 
 We can then subscribe to `startup_once` to run this script:
 

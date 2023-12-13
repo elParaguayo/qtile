@@ -15,9 +15,9 @@ Dependencies
 In order to run iqshell, you must have `ipykernel`_ and `jupyter_console`_.
 You can install the dependencies when you are installing qtile by running:
 
-.. code-block:: bash
-
-    $ pip install qtile[ipython]
+``` bash
+$ pip install qtile[ipython]
+```
 
 Otherwise, you can just install these two packages separately, either through
 PyPI or through your distribution package manager.
@@ -31,9 +31,9 @@ Installing and Running the Kernel
 Once you have the required dependencies, you can run the kernel right away by
 running:
 
-.. code-block:: bash
-
-    $ python3 -m libqtile.interactive.iqshell_kernel
+``` bash
+$ python3 -m libqtile.interactive.iqshell_kernel
+```
 
 However, this will merely spawn a kernel instance, you will have to run a
 separate frontend that connects to this kernel.
@@ -41,17 +41,17 @@ separate frontend that connects to this kernel.
 A more convenient way to run the kernel is by registering the kernel with
 Jupyter.  To register the kernel itself, run:
 
-.. code-block:: bash
-
-    $ python3 -m libqtile.interactive.iqshell_install
+``` bash
+$ python3 -m libqtile.interactive.iqshell_install
+```
 
 If you run this as a non-root user, or pass the `--user` flag, this will
 install to the user Jupyter kernel directory.  You can now invoke the kernel
 directly when starting a Jupyter frontend, for example:
 
-.. code-block:: bash
-
-    $ jupyter console --kernel qshell
+``` bash
+$ jupyter console --kernel qshell
+```
 
 The `iqshell` script will launch a Jupyter terminal console with the qshell kernel.
 
