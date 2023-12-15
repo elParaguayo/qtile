@@ -118,6 +118,9 @@ class HookHandlerCollection:
             raise AttributeError
         return self.hooks[name]
 
+    def __dir__(self) -> list[str]:
+        return list(self.hooks.keys())
+
     def _register(self, hook: Hook) -> None:
         def _hook_func(func):
             return self._subscribe(hook.name, func)

@@ -18,18 +18,16 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from docutils.parsers.rst import Directive
-from qtile_docs.base import SimpleDirectiveMixin
-from qtile_docs.templates import qtile_hooks_template
+from docs.qtile_docs.templates import qtile_hooks_template
 
 from libqtile.utils import import_class
 
 
-class QtileHooks(SimpleDirectiveMixin, Directive):
-    def make_rst(self):
-        module, class_name = self.arguments[0].rsplit(".", 1)
-        obj = import_class(module, class_name)
-        for method in sorted(obj.hooks):
-            rst = qtile_hooks_template.render(method=method)
-            for line in rst.splitlines():
-                yield line
+def qtile_hooks(baseclass="libqtile.hook.subscribe"):
+    module, class_name = baseclass.rsplit(".", 1)
+    obj = import_class(module, class_name)
+    text = ""
+    for method in sorted(obj.hooks):
+        text += qtile_hooks_template.render(method=method, baseclass=baseclass)
+
+    return text

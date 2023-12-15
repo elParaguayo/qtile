@@ -151,6 +151,9 @@ plugins:
           docstring_section_style: list
           extensions:
           - scripts/griffe_extensions.py
+          - scripts/hook_instance.py
+          preload_modules:
+          - libqtile.hook
           filters: ["!^_"]
           heading_level: 1
           inherited_members: true

@@ -4,4 +4,7 @@
 Built-in Hooks
 ==============
 
-.. qtile_hooks:: libqtile.hook.subscribe
+```python exec="1"
+from docs.qtile_docs.hooks import qtile_hooks
+print(qtile_hooks())
+```
