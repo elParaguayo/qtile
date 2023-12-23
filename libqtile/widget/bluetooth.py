@@ -38,18 +38,30 @@ OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
 PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
 
 
-def _catch_dbus_error(msg):
-    """Decorator to catch DBusErrors and log a message."""
+def retry(message, retries=10, interval=0.5, exceptions=list(), check_interface=""):
+    retries = max(retries, 1)
+    exceptions = tuple([DBusError, BlockingIOError] + exceptions)
 
     def _wrapper(func):
         async def f(self, *args, **kwargs):
-            try:
-                await func(self, *args, **kwargs)
-            except DBusError:
-                logger.warning(msg, self.name)
-            except BlockingIOError:
-                # Resource is temporarily unavailable
-                pass
+            count = 0
+            while True:
+                try:
+                    return await func(self, *args, **kwargs)
+                except exceptions as e:
+                    if count < retries:
+                        await asyncio.sleep(interval)
+                        count += 1
+                    else:
+                        if check_interface:
+                            proxy = await self._widget.get_proxy(self.path)
+                            try:
+                                proxy.get_interface(check_interface)
+                            except InterfaceNotFoundError:
+                                return False
+
+                        logger.exception("%s (%s).", message, e)  # noqa: G200
+                        return False
 
         return f
 
@@ -108,20 +120,20 @@ class BluetoothDevice(_BluetoothBase):
         self.battery_device = None
         self._battery = 0
 
-    @_catch_dbus_error("Unable to connect to device: %s.")
+    @retry("Unable to connect to device: %s.")
     async def connect(self):
         await self.interface.call_connect()
 
-    @_catch_dbus_error("Unable to disconnect device: %s.")
+    @retry("Unable to disconnect device: %s.")
     async def disconnect(self):
         await self.interface.call_disconnect()
 
-    @_catch_dbus_error("Unable to pair device: %s.")
+    @retry("Unable to pair device: %s.")
     async def pair_and_connect(self):
         await self.interface.call_pair()
         await self.connect()
 
-    @_catch_dbus_error("Unable to call action: %s.")
+    @retry("Unable to call action: %s.")
     async def action(self):
         """Helper method to call appropriate method based on device status."""
         if self.connected:
@@ -175,13 +187,13 @@ class BluetoothDevice(_BluetoothBase):
         self.battery_device = None
         self._battery = 0
 
-    @_catch_dbus_error("Unable to get battery device: %s.")
+    @retry("Unable to get battery device: %s.")
     async def get_battery(self):
         proxy = await self.widget.get_proxy(self.path)
         with contextlib.suppress(InterfaceNotFoundError):
             self.battery_device = proxy.get_interface(BLUEZ_BATTERY)
 
-    @_catch_dbus_error("Unable to update properties: %s.")
+    @retry("Unable to update properties: %s.")
     async def update_props(self, setup=False):
         """Refresh all the properties for the device."""
         # Some devices don't report a name so we fall back to the device address
@@ -244,15 +256,15 @@ class BluetoothAdapter(_BluetoothBase):
         self._powered = False
         create_task(self.update_props(setup=True))
 
-    @_catch_dbus_error("Unable to start discovery on adapter: %s.")
+    @retry("Unable to start discovery on adapter: %s.")
     async def start_discovery(self):
         await self.interface.call_start_discovery()
 
-    @_catch_dbus_error("Unable to stop discovery on adapter: %s.")
+    @retry("Unable to stop discovery on adapter: %s.")
     async def stop_discovery(self):
         await self.interface.call_stop_discovery()
 
-    @_catch_dbus_error("Unable to set power state for adapter: %s.")
+    @retry("Unable to set power state for adapter: %s.")
     async def power(self):
         await self.interface.set_powered(not self._powered)
 
@@ -268,14 +280,14 @@ class BluetoothAdapter(_BluetoothBase):
     def name(self):
         return self._name
 
-    @_catch_dbus_error("Unable to update discovery status: %s.")
+    @retry("Unable to update discovery status: %s.")
     async def discover(self):
         if self.discovering:
             await self.stop_discovery()
         else:
             await self.start_discovery()
 
-    @_catch_dbus_error("Unable to update properties: %s.")
+    @retry("Unable to update properties: %s.")
     async def update_props(self, setup=False):
         self._discovering = await self.interface.get_discovering()
         self._powered = await self.interface.get_powered()
