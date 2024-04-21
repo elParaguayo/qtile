@@ -78,7 +78,7 @@ class Gap:
     def _configure(self, qtile: Qtile, screen: Screen, reconfigure: bool = False) -> None:
         self.qtile = qtile
         self.screen = screen
-        self._size = self._initial_size
+        self._size = screen.scale(self._initial_size)
         # If both horizontal and vertical gaps are present, screen corners are
         # given to the horizontal ones
         if screen.top is self:
@@ -86,7 +86,7 @@ class Gap:
             self.y = screen.y + self.margin[0]
             self._length = screen.width - self.margin[1] - self.margin[3]
             self.width = self._length
-            self.height = self._initial_size
+            self.height = self._size
             self.horizontal = True
             self._size += self.margin[0] + self.margin[2]
         elif screen.bottom is self:
@@ -94,14 +94,14 @@ class Gap:
             self.y = screen.dy + screen.dheight - self.margin[2]
             self._length = screen.width - self.margin[1] - self.margin[3]
             self.width = self._length
-            self.height = self._initial_size
+            self.height = self._size
             self.horizontal = True
             self._size += self.margin[0] + self.margin[2]
         elif screen.left is self:
             self.x = screen.x + self.margin[3]
             self.y = screen.dy + self.margin[0]
             self._length = screen.dheight - self.margin[0] - self.margin[2]
-            self.width = self._initial_size
+            self.width = self._size
             self.height = self._length
             self.horizontal = False
             self._size += self.margin[1] + self.margin[3]
@@ -109,7 +109,7 @@ class Gap:
             self.x = screen.dx + screen.dwidth - self.margin[1]
             self.y = screen.dy + self.margin[0]
             self._length = screen.dheight - self.margin[0] - self.margin[2]
-            self.width = self._initial_size
+            self.width = self._size
             self.height = self._length
             self.horizontal = False
             self._size += self.margin[1] + self.margin[3]
@@ -231,6 +231,8 @@ class Bar(Gap, configurable.Configurable, CommandObject):
         if isinstance(self.border_width, int):  # type: ignore [unreachable]
             self.border_width = [self.border_width] * 4  # type: ignore [unreachable]
 
+        self._config_border_widths = self.border_width.copy()
+
         self.border_color: ColorsType
 
         # Check if colours are valid but don't convert to rgba here
@@ -250,6 +252,8 @@ class Bar(Gap, configurable.Configurable, CommandObject):
         # reserved or we're reconfiguring the bar because the screen has changed
         if not self._configured or self._reserved_space_updated or reconfigure:
             Gap._configure(self, qtile, screen)
+
+            self.border_width = [screen.scale(b) for b in self._config_border_widths]
 
             if any(self.margin) or any(self.border_width) or self._reserved_space_updated:
                 # Increase the margin size for the border. The border will be drawn

@@ -418,7 +418,11 @@ class Screen(CommandObject):
     resized to fill it. If the mode is ``"stretch"``, the image is stretched to fit all
     of it into the screen.
 
-    The ``x11_drag_polling_rate`` parameter specifies the rate for drag events in the X11 backend. By default this is set to None, indicating no limit. Because in the X11 backend we already handle motion notify events later, the performance should already be okay. However, to limit these events further you can use this variable and e.g. set it to your monitor refresh rate. 60 would mean that we handle a drag event 60 times per second.
+    The ``x11_drag_polling_rate`` parameter specifies the rate for drag events in the X11 backend.
+    By default this is set to None, indicating no limit. Because in the X11 backend we already
+    handle motion notify events later, the performance should already be okay. However,
+    to limit these events further you can use this variable and e.g. set it to your monitor
+    refresh rate. 60 would mean that we handle a drag event 60 times per second.
 
     """
 
@@ -438,6 +442,7 @@ class Screen(CommandObject):
         y: int | None = None,
         width: int | None = None,
         height: int | None = None,
+        dpi: int = 96
     ) -> None:
         self.top = top
         self.bottom = bottom
@@ -454,6 +459,7 @@ class Screen(CommandObject):
         self.width = width if width is not None else 0
         self.height = height if height is not None else 0
         self.previous_group: _Group | None = None
+        self.dpi = dpi
 
     def _configure(
         self,
@@ -483,6 +489,11 @@ class Screen(CommandObject):
     def paint(self, path: str, mode: str | None = None) -> None:
         if self.qtile:
             self.qtile.paint_screen(self, path, mode)
+
+    def scale(self, px: int) -> int:
+        if self.dpi == 96:
+            return px
+        return int(px / 96 * self.dpi)
 
     @property
     def gaps(self) -> Iterable[BarType]:
