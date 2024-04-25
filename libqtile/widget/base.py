@@ -565,19 +565,19 @@ class _TextBox(_Widget):
     @property
     def actual_padding(self):
         if self.padding is None:
-            return self.fontsize / 2
+            return self.bar.screen.scale(self.fontsize) / 2
         else:
             return self.padding
 
     def _configure(self, qtile, bar):
         _Widget._configure(self, qtile, bar)
         if self.fontsize is None:
-            self.fontsize = self.bar.height - self.bar.height / 5
+            self.fontsize = self.bar._initial_size - self.bar._initial_size / 5
         self.layout = self.drawer.textlayout(
             self.formatted_text,
             self.foreground,
             self.font,
-            self.fontsize,
+            bar.screen.scale(self.fontsize),
             self.fontshadow,
             markup=self.markup,
         )

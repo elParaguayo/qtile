@@ -823,6 +823,7 @@ class _Window:
         above=False,
         margin=None,
         respect_hints=False,
+        scale=True
     ):
         """
         Places the window at the specified location with the given size.
@@ -841,6 +842,9 @@ class _Window:
         above: bool, optional
             If True, the geometry will be adjusted to respect hints provided by the
             client.
+        scale: bool, optional
+            If True, borders will be scaled based on the current Screen's dpi setting
+
         """
 
         # TODO: self.x/y/height/width are updated BEFORE
@@ -856,6 +860,16 @@ class _Window:
         #       send_notify = True
         # #for now, we just:
         send_notify = True
+
+        self.borderwidth = borderwidth
+
+        if self.group and scale:
+            new_width = self.group.screen.scale(borderwidth)
+            delta = new_width - borderwidth
+            if delta:
+                width -= 2 * delta
+                height -= 2 * delta
+                borderwidth = new_width
 
         # Adjust the placement to account for layout margins, if there are any.
         if margin is not None:
@@ -1212,7 +1226,7 @@ class _Window:
                 parent = child
 
     def paint_borders(self, color, width):
-        self.borderwidth = width
+        # self.borderwidth = width
         self.bordercolor = color
         self.window.configure(borderwidth=width)
         self.window.paint_borders(self.depth, color, width, self.width, self.height)
@@ -1612,6 +1626,7 @@ class Static(_Window, base.Static):
             self.height,
             self.borderwidth,
             self.bordercolor,
+            scale=False
         )
         return False
 
@@ -1943,6 +1958,7 @@ class Window(_Window, base.Window):
                 self.bordercolor,
                 above=False,
                 respect_hints=True,
+                scale=False
             )
         if self._float_state != new_float_state:
             self._float_state = new_float_state
@@ -2075,6 +2091,7 @@ class Window(_Window, base.Window):
                 height,
                 self.borderwidth,
                 self.bordercolor,
+                scale=False
             )
         self.update_state()
         return False

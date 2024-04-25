@@ -233,9 +233,9 @@ class Section(TreeNode):
     def draw(self, layout, top, level=0):
         del layout._layout.width  # no centering
         # draw a horizontal line above the section
-        layout._drawer.draw_hbar(layout.section_fg, 0, layout.panel_width, top, linewidth=1)
+        layout._drawer.draw_hbar(layout.section_fg, 0, layout.panel_width_scaled, top, linewidth=1)
         # draw the section title
-        layout._layout.font_size = layout.section_fontsize
+        layout._layout.font_size = layout.dpi_scale(layout.section_fontsize)
         layout._layout.text = self.add_superscript(self.title)
         layout._layout.colour = layout.section_fg
         layout._layout.draw(x=layout.section_left, y=top + layout.section_top)
@@ -258,7 +258,7 @@ class Window(TreeNode):
 
         # setup parameters for drawing self
         left = layout.padding_left + level * layout.level_shift
-        layout._layout.font_size = layout.fontsize
+        layout._layout.font_size = layout.dpi_scale(layout.fontsize)
         layout._layout.text = self.add_superscript(self.window.name)
         if self.window is layout._focused:
             fg = layout.active_fg
@@ -270,7 +270,7 @@ class Window(TreeNode):
             fg = layout.inactive_fg
             bg = layout.inactive_bg
         layout._layout.colour = fg
-        layout._layout.width = layout.panel_width - left
+        layout._layout.width = layout.panel_width_scaled - left
         # get a text frame from the above
         framed = layout._layout.framed(
             layout.border_width, bg, layout.padding_x, layout.padding_y
@@ -395,6 +395,10 @@ class TreeTab(Layout):
         self._tree = Root(self.sections)
         self._nodes = {}
 
+    @property
+    def panel_width_scaled(self) -> int:
+        return self.dpi_scale(self.panel_width)
+
     def clone(self, group: _Group) -> Self:
         c = Layout.clone(self, group)
         c._focused = None
@@ -460,7 +464,7 @@ class TreeTab(Layout):
 
     def _create_panel(self, screen_rect):
         self._panel = self.group.qtile.core.create_internal(
-            screen_rect.x, screen_rect.y, self.panel_width, 100
+            screen_rect.x, screen_rect.y, self.panel_width_scaled, 100
         )
         self._create_drawer(screen_rect)
         self._panel.process_window_expose = self.draw_panel
@@ -473,7 +477,7 @@ class TreeTab(Layout):
             return
         self._drawer.clear(self.bg_color)
         self._tree.draw(self, 0)
-        self._drawer.draw(offsetx=0, width=self.panel_width)
+        self._drawer.draw(offsetx=0, width=self.panel_width_scaled)
 
     def process_button_click(self, x, y, _buttom):
         node = self._tree.button_press(x, y)
@@ -553,9 +557,9 @@ class TreeTab(Layout):
         if not self._panel:
             self._create_panel(screen_rect)
         if self.place_right:
-            body, panel = screen_rect.hsplit(screen_rect.width - self.panel_width)
+            body, panel = screen_rect.hsplit(screen_rect.width - self.panel_width_scaled)
         else:
-            panel, body = screen_rect.hsplit(self.panel_width)
+            panel, body = screen_rect.hsplit(self.panel_width_scaled)
         self._resize_panel(panel)
         self._panel.unhide()
 
@@ -741,19 +745,19 @@ class TreeTab(Layout):
 
         if self._drawer is None:
             self._drawer = self._panel.create_drawer(
-                self.panel_width,
+                self.panel_width_scaled,
                 screen_rect.height,
             )
         self._drawer.clear(self.bg_color)
         self._layout = self._drawer.textlayout(
-            "", "ffffff", self.font, self.fontsize, self.fontshadow, wrap=False
+            "", "ffffff", self.font, self.dpi_scale(self.fontsize), self.fontshadow, wrap=False
         )
 
     def layout(self, windows: Sequence[base.Window], screen_rect: ScreenRect) -> None:
         if self.place_right:
-            body, panel = screen_rect.hsplit(screen_rect.width - self.panel_width)
+            body, panel = screen_rect.hsplit(screen_rect.width - self.panel_width_scaled)
         else:
-            panel, body = screen_rect.hsplit(self.panel_width)
+            panel, body = screen_rect.hsplit(self.panel_width_scaled)
         self._resize_panel(panel)
         Layout.layout(self, windows, body)
 

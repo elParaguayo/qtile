@@ -74,6 +74,12 @@ class Layout(CommandObject, configurable.Configurable, metaclass=ABCMeta):
             raise RuntimeError("Layout group accessed too early")
         return self._group
 
+    def dpi_scale(self, value) -> int:
+        if not self.group or not self.group.screen:
+            return value
+
+        return self.group.screen.scale(value)
+
     def clone(self, group: _Group) -> Self:
         """Duplicate a layout
 

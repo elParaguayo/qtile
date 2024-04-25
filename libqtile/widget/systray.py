@@ -257,7 +257,7 @@ class Systray(base._Widget, window._Window):  # type: ignore[misc]
                 yoffset = self.offsety + offset
                 step = icon.height
 
-            icon.place(xoffset, yoffset, icon.width, self.icon_size, 0, None)
+            icon.place(xoffset, yoffset, icon.width, self.icon_size, 0, None, scale=False)
             if icon.hidden:
                 icon.unhide()
                 data = [
