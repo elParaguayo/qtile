@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import glob
 import importlib
+import math
 import os
 import traceback
 from abc import ABCMeta, abstractmethod
@@ -628,7 +629,9 @@ def remove_dbus_rules() -> None:
 
 class _BorderStyle(metaclass=ABCMeta):
 
-    def _x11_draw(self, window, depth, pixmap, gc, outer_w, outer_h, borderwidth, x, y, width, height):
+    def _x11_draw(
+        self, window, depth, pixmap, gc, outer_w, outer_h, borderwidth, x, y, width, height
+    ):
         self.visual = window.get_attributes().visual
         self.window = window
         self.wid = window.wid
@@ -670,40 +673,49 @@ class _BorderStyle(metaclass=ABCMeta):
         if image_buffer == ffi.NULL:
             raise RuntimeError("Couldn't allocate cairo buffer.")
 
-        return image_buffer, surface     
+        return image_buffer, surface
 
     def _wayland_draw(self, window, outer_w, outer_h, borderwidth, x, y, width, height):
+
+        # NOTE: This is a complete hack for now.
+        # the libqtile.backend.wayland import is not working in wephyr
         global ffi, lib, wlr_ffi, wlr_lib, SceneBuffer, Buffer
         from wlroots import ffi as wlr_ffi
         from wlroots import lib as wlr_lib
         from wlroots.wlr_types import Buffer, SceneBuffer
         from libqtile.backend.wayland._ffi import ffi, lib
-        print("imports done")
+
         self.window = window
         self.outer_w = outer_w
         self.outer_h = outer_h
         bw = borderwidth
         self.rects = [
-            (x, y, outer_w - x * 2, bw),
-            (outer_w - bw - x, bw + y, bw, outer_h - bw * 2 - y * 2),
-            (x, outer_h - bw - y, outer_w - x * 2, bw),
-            (x, bw + y, bw, outer_h - bw * 2 - y * 2)
+            (x, y, outer_w - x * 2 - bw , bw),
+            (outer_w - bw * 2 - x * 2, bw + y, bw, outer_h - bw * 2 - y * 2),
+            (x, outer_h - bw * 2- y * 2, outer_w - x * 2 - bw, bw),
+            (x, bw + y, bw, outer_h - bw * 2 - y * 2),
         ]
         return self.wayland_draw(borderwidth, x, y, width, height)
-    
+
     def wayland_draw(self, borderwidth, x, y, width, height):
         """Instructions."""
 
 
 class GradientBorder(_BorderStyle):
+    """
+    Renders borders with a gradient.
 
-    def __init__(self, *colours, points=((0, 0), (1, 1)), offsets=None):
+    Instructions to follow...
+    """
+
+    def __init__(self, *colours, points=((0, 0), (0, 1)), offsets=None, radial=False):
         self.colours = colours
         self.points = points
         if offsets is None:
             self.offsets = [x / (len(colours) - 1) for x in range(len(colours))]
         else:
             self.offsets = offsets
+        self.radial = radial
 
     def _draw(self, surface, x, y, width, height):
         def pos(point):
@@ -714,12 +726,19 @@ class GradientBorder(_BorderStyle):
             ctx.translate(x, y)
             ctx.rectangle(0, 0, width, height)
             ctx.clip()
-            lg = cairocffi.LinearGradient(*pos(self.points[0]), *pos(self.points[1]))
+            if self.radial:
+                ctx.translate(width // 2, height // 2)
+                ctx.scale(width, height)
+                length = math.sqrt(2) / 2
+                gradient = cairocffi.RadialGradient(0, 0, 0, 0, 0, length)
+            else:
+                gradient = cairocffi.LinearGradient(*pos(self.points[0]), *pos(self.points[1]))
             for offset, c in zip(self.offsets, self.colours):
-                lg.add_color_stop_rgba(offset, *rgb(c))
-            ctx.set_source(lg)
-            ctx.paint()   
-            ctx.restore()         
+                gradient.add_color_stop_rgba(offset, *rgb(c))
+            ctx.set_source(gradient)
+            ctx.paint()
+            ctx.restore()
+            surface.write_to_png("/home/anto/rad.png")
 
     def x11_draw(self, borderwidth, x, y, width, height):
         surface = self._create_xcb_surface()
@@ -735,42 +754,12 @@ class GradientBorder(_BorderStyle):
             scene_buffer = SceneBuffer.create(self.window.tree, Buffer(image_buffer))
             scene_buffer.node.set_position(x, y)
             fbox = wlr_ffi.new("struct wlr_fbox *")
-            print(x, y, w, h)
             fbox.x = x
             fbox.y = y
             fbox.width = w
             fbox.height = h
             wlr_lib.wlr_scene_buffer_set_source_box(scene_buffer._ptr, fbox)
+            wlr_lib.wlr_scene_buffer_set_dest_size(scene_buffer._ptr, w, h)
             scenes.append(scene_buffer)
 
-        print(scenes, image_buffer, surface)
-
         return scenes, image_buffer, surface
-
-
-# core = self.conn.conn.core
-# outer_w = width + borderwidth * 2
-# outer_h = height + borderwidth * 2
-# vid = self.get_attributes().visual
-# root = self.conn.conn.get_setup().roots[0]
-
-# def find_visual(root, depth, visual):
-#     for d in root.allowed_depths:
-#         if d.depth == depth:
-#             for v in d.visuals:
-#                 if v.visual_id == visual:
-#                     return v
-
-# with PixmapID(self.conn.conn) as border:
-#     v = find_visual(root, depth, vid)
-#     pid = self.conn.conn.generate_id()
-#     self.conn.conn.core.CreatePixmap(depth, pid, self.wid, outer_w, outer_h)
-#     surface = cairocffi.XCBSurface(self.conn.conn, pid, v, outer_w, outer_h)
-#     ctx = cairocffi.Context(surface)
-#     lg = cairocffi.LinearGradient(0, 0, width, height)
-#     lg.add_color_stop_rgb(0, 1, 0, 0)
-#     lg.add_color_stop_rgb(0.5, 0, 1, 0)
-#     lg.add_color_stop_rgb(1, 0, 0, 1)
-#     ctx.set_source(lg)
-#     ctx.paint()
-#     print(pid)
