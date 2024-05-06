@@ -448,7 +448,19 @@ class XWindow:
                 coord = 0
                 for i in range(borders):
                     if isinstance(colors[i], _BorderStyle):
-                        colors[i]._x11_draw(self, depth, pixmap, gc, outer_w, outer_h, borderwidth, coord, coord, outer_w - coord * 2, outer_h - coord * 2)
+                        colors[i]._x11_draw(
+                            self,
+                            depth,
+                            pixmap,
+                            gc,
+                            outer_w,
+                            outer_h,
+                            borderwidth,
+                            coord,
+                            coord,
+                            outer_w - coord * 2,
+                            outer_h - coord * 2,
+                        )
                     else:
                         core.ChangeGC(
                             gc, xcffib.xproto.GC.Foreground, [self.conn.color_pixel(colors[i])]

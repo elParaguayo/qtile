@@ -24,7 +24,6 @@ from __future__ import annotations
 import asyncio
 import glob
 import importlib
-import math
 import os
 import traceback
 from abc import ABCMeta, abstractmethod
@@ -61,6 +60,8 @@ dbus_bus_connections = set()
 # Create a list to collect references to tasks so they're not garbage collected
 # before they've run
 TASKS: list[asyncio.Task[None]] = []
+
+ROOT_2 = 0.70711
 
 
 def create_task(coro: Coroutine) -> asyncio.Task | None:
@@ -690,10 +691,14 @@ class _BorderStyle(metaclass=ABCMeta):
         self.outer_h = outer_h
         bw = borderwidth
         self.rects = [
-            (x, y, outer_w - x * 2 - bw , bw),
-            (outer_w - bw * 2 - x * 2, bw + y, bw, outer_h - bw * 2 - y * 2),
-            (x, outer_h - bw * 2- y * 2, outer_w - x * 2 - bw, bw),
-            (x, bw + y, bw, outer_h - bw * 2 - y * 2),
+            # These are equivalent to the `geometries` in
+            # libqtile.backend.wayland.window.Window.paint_borders (line 377)
+            # However, the whole x and y position need to be shifted back by
+            # the border width. Why??
+            (x, y, width, bw),
+            (outer_w - bw - x, bw + y, bw, height - 2 * bw),
+            (x, outer_h - y - bw, width, bw),
+            (x, bw + y, bw, height - bw * 2),
         ]
         return self.wayland_draw(borderwidth, x, y, width, height)
 
@@ -717,7 +722,7 @@ class GradientBorder(_BorderStyle):
             self.offsets = offsets
         self.radial = radial
 
-    def _draw(self, surface, x, y, width, height):
+    def _draw(self, surface, bw, x, y, width, height):
         def pos(point):
             return tuple(p * d for p, d in zip(point, (width, height)))
 
@@ -725,12 +730,12 @@ class GradientBorder(_BorderStyle):
             ctx.save()
             ctx.translate(x, y)
             ctx.rectangle(0, 0, width, height)
+            ctx.rectangle(width - bw, bw, - (width - 2 * bw), (height - 2 * bw))
             ctx.clip()
             if self.radial:
                 ctx.translate(width // 2, height // 2)
                 ctx.scale(width, height)
-                length = math.sqrt(2) / 2
-                gradient = cairocffi.RadialGradient(0, 0, 0, 0, 0, length)
+                gradient = cairocffi.RadialGradient(0, 0, 0, 0, 0, ROOT_2)
             else:
                 gradient = cairocffi.LinearGradient(*pos(self.points[0]), *pos(self.points[1]))
             for offset, c in zip(self.offsets, self.colours):
@@ -738,20 +743,20 @@ class GradientBorder(_BorderStyle):
             ctx.set_source(gradient)
             ctx.paint()
             ctx.restore()
-            surface.write_to_png("/home/anto/rad.png")
 
     def x11_draw(self, borderwidth, x, y, width, height):
         surface = self._create_xcb_surface()
-        self._draw(surface, x, y, width, height)
+        self._draw(surface, borderwidth, x, y, width, height)
 
     def wayland_draw(self, borderwidth, x, y, width, height):
         image_buffer, surface = self._new_buffer()
-        self._draw(surface, x, y, width, height)
+        self._draw(surface, borderwidth, x, y, width, height)
 
         scenes = []
 
         for x, y, w, h in self.rects:
             scene_buffer = SceneBuffer.create(self.window.tree, Buffer(image_buffer))
+            wlr_lib.wlr_scene_buffer_set_dest_size(scene_buffer._ptr, w, h)
             scene_buffer.node.set_position(x, y)
             fbox = wlr_ffi.new("struct wlr_fbox *")
             fbox.x = x
@@ -759,7 +764,6 @@ class GradientBorder(_BorderStyle):
             fbox.width = w
             fbox.height = h
             wlr_lib.wlr_scene_buffer_set_source_box(scene_buffer._ptr, fbox)
-            wlr_lib.wlr_scene_buffer_set_dest_size(scene_buffer._ptr, w, h)
             scenes.append(scene_buffer)
 
         return scenes, image_buffer, surface

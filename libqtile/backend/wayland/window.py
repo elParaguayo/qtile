@@ -358,8 +358,17 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
         for i, color in enumerate(colors):
             bw = widths[i]
             if isinstance(color, _BorderStyle):
-                scenes, image_buffer, surface = color._wayland_draw(self, outer_w, outer_h, bw, coord, coord, outer_w - coord * 2, outer_h - coord * 2)
-                new_borders.extend(scenes)
+                scenes, image_buffer, surface = color._wayland_draw(
+                    self,
+                    outer_w,
+                    outer_h,
+                    bw,
+                    coord,
+                    coord,
+                    outer_w - coord * 2,
+                    outer_h - coord * 2,
+                )
+                new_borders.append(scenes)
                 self._border_styles[color] = (scenes, image_buffer, surface)
             else:
                 color_ = _rgb(color)
@@ -1074,7 +1083,16 @@ class Internal(_Base, base.Internal):
         for i, color in enumerate(colors):
             bw = widths[i]
             if isinstance(color, _BorderStyle):
-                scenes, image_buffer, surface = color.wayland_draw(self, outer_w, outer_h, bw, coord, coord, outer_w - coord * 2, outer_h - coord * 2)
+                scenes, image_buffer, surface = color.wayland_draw(
+                    self,
+                    outer_w,
+                    outer_h,
+                    bw,
+                    coord,
+                    coord,
+                    outer_w - coord * 2,
+                    outer_h - coord * 2,
+                )
                 new_borders.append(*scenes)
                 self._border_styles[color] = (scenes, image_buffer, surface)
             else:
