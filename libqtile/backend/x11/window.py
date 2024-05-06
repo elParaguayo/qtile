@@ -20,6 +20,7 @@ from libqtile.backend.x11.drawer import Drawer
 from libqtile.command.base import CommandError, expose_command
 from libqtile.log_utils import logger
 from libqtile.scratchpad import ScratchPad
+from libqtile.utils import _BorderStyle
 
 if TYPE_CHECKING:
     from libqtile.command.base import ItemT
@@ -427,6 +428,8 @@ class XWindow:
         if isinstance(colors, str):
             self.set_attribute(borderpixel=self.conn.color_pixel(colors))
             return
+        elif isinstance(colors, _BorderStyle):
+            colors = [colors]
 
         if len(colors) > borderwidth:
             colors = colors[:borderwidth]
@@ -444,13 +447,16 @@ class XWindow:
                     borderwidths[i] += 1
                 coord = 0
                 for i in range(borders):
-                    core.ChangeGC(
-                        gc, xcffib.xproto.GC.Foreground, [self.conn.color_pixel(colors[i])]
-                    )
-                    rect = xcffib.xproto.RECTANGLE.synthetic(
-                        coord, coord, outer_w - coord * 2, outer_h - coord * 2
-                    )
-                    core.PolyFillRectangle(pixmap, gc, 1, [rect])
+                    if isinstance(colors[i], _BorderStyle):
+                        colors[i]._x11_draw(self, depth, pixmap, gc, outer_w, outer_h, borderwidth, coord, coord, outer_w - coord * 2, outer_h - coord * 2)
+                    else:
+                        core.ChangeGC(
+                            gc, xcffib.xproto.GC.Foreground, [self.conn.color_pixel(colors[i])]
+                        )
+                        rect = xcffib.xproto.RECTANGLE.synthetic(
+                            coord, coord, outer_w - coord * 2, outer_h - coord * 2
+                        )
+                        core.PolyFillRectangle(pixmap, gc, 1, [rect])
                     coord += borderwidths[i]
                 self._set_borderpixmap(depth, pixmap, gc, borderwidth, width, height)
 

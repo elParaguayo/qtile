@@ -44,6 +44,7 @@ from libqtile.backend.wayland.drawer import Drawer
 from libqtile.backend.wayland.wlrq import HasListeners
 from libqtile.command.base import CommandError, expose_command
 from libqtile.log_utils import logger
+from libqtile.utils import _BorderStyle
 
 try:
     # Continue if ffi not built, so that docs can be built without wayland deps.
@@ -129,6 +130,7 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
         # Outer list: outside-in borders i.e. multiple for multiple borders
         self._borders: list[list[SceneRect]] = []
         self.bordercolor: ColorsType = "000000"
+        self._border_styles = {}
 
         # This is a placeholder to be set properly when the window maps for the first
         # time (and therefore exposed to the user). We need the attribute to exist so
@@ -354,32 +356,37 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
         coord = 0
 
         for i, color in enumerate(colors):
-            color_ = _rgb(color)
             bw = widths[i]
-
-            # [x, y, width, height] for N, E, S, W
-            geometries = (
-                (coord, coord, outer_w - coord * 2, bw),
-                (outer_w - bw - coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
-                (coord, outer_h - bw - coord, outer_w - coord * 2, bw),
-                (coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
-            )
-
-            if old_borders:
-                rects = old_borders.pop(0)
-                for (x, y, w, h), rect in zip(geometries, rects):
-                    rect.set_color(color_)
-                    rect.set_size(w, h)
-                    rect.node.set_position(x, y)
-
+            if isinstance(color, _BorderStyle):
+                scenes, image_buffer, surface = color._wayland_draw(self, outer_w, outer_h, bw, coord, coord, outer_w - coord * 2, outer_h - coord * 2)
+                new_borders.extend(scenes)
+                self._border_styles[color] = (scenes, image_buffer, surface)
             else:
-                rects = []
-                for x, y, w, h in geometries:
-                    rect = SceneRect(self.container, w, h, color_)
-                    rect.node.set_position(x, y)
-                    rects.append(rect)
+                color_ = _rgb(color)
 
-            new_borders.append(rects)
+                # [x, y, width, height] for N, E, S, W
+                geometries = (
+                    (coord, coord, outer_w - coord * 2, bw),
+                    (outer_w - bw - coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
+                    (coord, outer_h - bw - coord, outer_w - coord * 2, bw),
+                    (coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
+                )
+
+                if old_borders:
+                    rects = old_borders.pop(0)
+                    for (x, y, w, h), rect in zip(geometries, rects):
+                        rect.set_color(color_)
+                        rect.set_size(w, h)
+                        rect.node.set_position(x, y)
+
+                else:
+                    rects = []
+                    for x, y, w, h in geometries:
+                        rect = SceneRect(self.container, w, h, color_)
+                        rect.node.set_position(x, y)
+                        rects.append(rect)
+
+                new_borders.append(rects)
             coord += bw
 
         for rects in old_borders:
@@ -1065,32 +1072,37 @@ class Internal(_Base, base.Internal):
         coord = 0
 
         for i, color in enumerate(colors):
-            color_ = _rgb(color)
             bw = widths[i]
-
-            # [x, y, width, height] for N, E, S, W
-            geometries = (
-                (coord, coord, outer_w - coord * 2, bw),
-                (outer_w - bw - coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
-                (coord, outer_h - bw - coord, outer_w - coord * 2, bw),
-                (coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
-            )
-
-            if old_borders:
-                rects = old_borders.pop(0)
-                for (x, y, w, h), rect in zip(geometries, rects):
-                    rect.set_color(color_)
-                    rect.set_size(w, h)
-                    rect.node.set_position(x, y)
-
+            if isinstance(color, _BorderStyle):
+                scenes, image_buffer, surface = color.wayland_draw(self, outer_w, outer_h, bw, coord, coord, outer_w - coord * 2, outer_h - coord * 2)
+                new_borders.append(*scenes)
+                self._border_styles[color] = (scenes, image_buffer, surface)
             else:
-                rects = []
-                for x, y, w, h in geometries:
-                    rect = SceneRect(self.tree, w, h, color_)
-                    rect.node.set_position(x, y)
-                    rects.append(rect)
+                color_ = _rgb(color)
 
-            new_borders.append(rects)
+                # [x, y, width, height] for N, E, S, W
+                geometries = (
+                    (coord, coord, outer_w - coord * 2, bw),
+                    (outer_w - bw - coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
+                    (coord, outer_h - bw - coord, outer_w - coord * 2, bw),
+                    (coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
+                )
+
+                if old_borders:
+                    rects = old_borders.pop(0)
+                    for (x, y, w, h), rect in zip(geometries, rects):
+                        rect.set_color(color_)
+                        rect.set_size(w, h)
+                        rect.node.set_position(x, y)
+
+                else:
+                    rects = []
+                    for x, y, w, h in geometries:
+                        rect = SceneRect(self.tree, w, h, color_)
+                        rect.node.set_position(x, y)
+                        rects.append(rect)
+
+                new_borders.append(rects)
             coord += bw
 
         for rects in old_borders:

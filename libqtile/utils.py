@@ -26,12 +26,15 @@ import glob
 import importlib
 import os
 import traceback
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
 from random import randint
 from shutil import which
 from typing import TYPE_CHECKING, Union
+
+import cairocffi
 
 try:
     from dbus_next import AuthError, Message, Variant
@@ -40,7 +43,8 @@ try:
 
     has_dbus = True
 except ImportError:
-    has_dbus = False
+    has_dbus = True
+
 
 from libqtile.log_utils import logger
 
@@ -620,3 +624,153 @@ def remove_dbus_rules() -> None:
         # We need to manually close the socket until https://github.com/altdesktop/python-dbus-next/pull/148
         # gets merged. There's no error on multiple calls to 'close()'.
         bus._sock.close()
+
+
+class _BorderStyle(metaclass=ABCMeta):
+
+    def _x11_draw(self, window, depth, pixmap, gc, outer_w, outer_h, borderwidth, x, y, width, height):
+        self.visual = window.get_attributes().visual
+        self.window = window
+        self.wid = window.wid
+        self.depth = depth
+        self.pixmap = pixmap
+        self.gc = gc
+        self.outer_w = outer_w
+        self.outer_h = outer_h
+        self.x11_draw(borderwidth, x, y, width, height)
+
+    def _create_xcb_surface(self):
+
+        root = self.window.conn.conn.get_setup().roots[0]
+
+        def find_visual(visual):
+            for d in root.allowed_depths:
+                if d.depth == self.depth:
+                    for v in d.visuals:
+                        if v.visual_id == visual:
+                            return v
+
+        return cairocffi.XCBSurface(
+            self.window.conn.conn,
+            self.pixmap,
+            find_visual(self.visual),
+            self.outer_w,
+            self.outer_h,
+        )
+
+    @abstractmethod
+    def x11_draw(self, borderwidth, x, y, width, height):
+        """Instructions."""
+
+    def _new_buffer(self):
+        surface = cairocffi.ImageSurface(cairocffi.FORMAT_ARGB32, self.outer_w, self.outer_h)
+        stride = surface.get_stride()
+        data = cairocffi.cairo.cairo_image_surface_get_data(surface._pointer)
+        image_buffer = lib.cairo_buffer_create(self.outer_w, self.outer_h, stride, data)
+        if image_buffer == ffi.NULL:
+            raise RuntimeError("Couldn't allocate cairo buffer.")
+
+        return image_buffer, surface     
+
+    def _wayland_draw(self, window, outer_w, outer_h, borderwidth, x, y, width, height):
+        global ffi, lib, wlr_ffi, wlr_lib, SceneBuffer, Buffer
+        from wlroots import ffi as wlr_ffi
+        from wlroots import lib as wlr_lib
+        from wlroots.wlr_types import Buffer, SceneBuffer
+        from libqtile.backend.wayland._ffi import ffi, lib
+        print("imports done")
+        self.window = window
+        self.outer_w = outer_w
+        self.outer_h = outer_h
+        bw = borderwidth
+        self.rects = [
+            (x, y, outer_w - x * 2, bw),
+            (outer_w - bw - x, bw + y, bw, outer_h - bw * 2 - y * 2),
+            (x, outer_h - bw - y, outer_w - x * 2, bw),
+            (x, bw + y, bw, outer_h - bw * 2 - y * 2)
+        ]
+        return self.wayland_draw(borderwidth, x, y, width, height)
+    
+    def wayland_draw(self, borderwidth, x, y, width, height):
+        """Instructions."""
+
+
+class GradientBorder(_BorderStyle):
+
+    def __init__(self, *colours, points=((0, 0), (1, 1)), offsets=None):
+        self.colours = colours
+        self.points = points
+        if offsets is None:
+            self.offsets = [x / (len(colours) - 1) for x in range(len(colours))]
+        else:
+            self.offsets = offsets
+
+    def _draw(self, surface, x, y, width, height):
+        def pos(point):
+            return tuple(p * d for p, d in zip(point, (width, height)))
+
+        with cairocffi.Context(surface) as ctx:
+            ctx.save()
+            ctx.translate(x, y)
+            ctx.rectangle(0, 0, width, height)
+            ctx.clip()
+            lg = cairocffi.LinearGradient(*pos(self.points[0]), *pos(self.points[1]))
+            for offset, c in zip(self.offsets, self.colours):
+                lg.add_color_stop_rgba(offset, *rgb(c))
+            ctx.set_source(lg)
+            ctx.paint()   
+            ctx.restore()         
+
+    def x11_draw(self, borderwidth, x, y, width, height):
+        surface = self._create_xcb_surface()
+        self._draw(surface, x, y, width, height)
+
+    def wayland_draw(self, borderwidth, x, y, width, height):
+        image_buffer, surface = self._new_buffer()
+        self._draw(surface, x, y, width, height)
+
+        scenes = []
+
+        for x, y, w, h in self.rects:
+            scene_buffer = SceneBuffer.create(self.window.tree, Buffer(image_buffer))
+            scene_buffer.node.set_position(x, y)
+            fbox = wlr_ffi.new("struct wlr_fbox *")
+            print(x, y, w, h)
+            fbox.x = x
+            fbox.y = y
+            fbox.width = w
+            fbox.height = h
+            wlr_lib.wlr_scene_buffer_set_source_box(scene_buffer._ptr, fbox)
+            scenes.append(scene_buffer)
+
+        print(scenes, image_buffer, surface)
+
+        return scenes, image_buffer, surface
+
+
+# core = self.conn.conn.core
+# outer_w = width + borderwidth * 2
+# outer_h = height + borderwidth * 2
+# vid = self.get_attributes().visual
+# root = self.conn.conn.get_setup().roots[0]
+
+# def find_visual(root, depth, visual):
+#     for d in root.allowed_depths:
+#         if d.depth == depth:
+#             for v in d.visuals:
+#                 if v.visual_id == visual:
+#                     return v
+
+# with PixmapID(self.conn.conn) as border:
+#     v = find_visual(root, depth, vid)
+#     pid = self.conn.conn.generate_id()
+#     self.conn.conn.core.CreatePixmap(depth, pid, self.wid, outer_w, outer_h)
+#     surface = cairocffi.XCBSurface(self.conn.conn, pid, v, outer_w, outer_h)
+#     ctx = cairocffi.Context(surface)
+#     lg = cairocffi.LinearGradient(0, 0, width, height)
+#     lg.add_color_stop_rgb(0, 1, 0, 0)
+#     lg.add_color_stop_rgb(0.5, 0, 1, 0)
+#     lg.add_color_stop_rgb(1, 0, 0, 1)
+#     ctx.set_source(lg)
+#     ctx.paint()
+#     print(pid)
