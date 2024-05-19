@@ -49,6 +49,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         try:
             import wlroots  # noqa: F401
         except ImportError:
+            raise
             sys.exit("Wayland backend requested but pywlroots is not installed.")
 
     return _orig.build_wheel(wheel_directory, config_settings, metadata_directory)
