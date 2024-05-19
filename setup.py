@@ -56,6 +56,7 @@ def get_cffi_modules():
     if can_import("wlroots.ffi_build"):
         cffi_modules.append("libqtile/backend/wayland/cffi/build.py:ffi")
     else:
+        importlib.import_module("wlroots.ffi_build")
         print("Failed to find pywlroots. Wayland backend dependencies not built.")
 
     return cffi_modules
