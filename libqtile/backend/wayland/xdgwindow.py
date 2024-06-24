@@ -67,6 +67,7 @@ class XdgWindow(Window[XdgSurface]):
         surface.set_wm_capabilities(WM_CAPABILITIES)
         surface.data = self.data_handle
         self.tree = core.scene.xdg_surface_create(self.container, surface)
+        self._clip_box: Box | None = None
 
         self.add_listener(surface.surface.map_event, self._on_map)
         self.add_listener(surface.surface.unmap_event, self._on_unmap)
@@ -223,6 +224,14 @@ class XdgWindow(Window[XdgSurface]):
             self._urgent = True
             hook.fire("client_urgent_hint_changed", self)
 
+    @expose_command()
+    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0):
+        self._clip_box = Box(x, y, w, h)
+
+    @expose_command()
+    def clear_clip(self):
+        self._clip_box = None
+
     def clip(self) -> None:
         if not self.tree:
             return
@@ -230,9 +239,10 @@ class XdgWindow(Window[XdgSurface]):
             return
         if next(self.tree.children, None) is None:
             return
-        self.tree.node.subsurface_tree_set_clip(
-            Box(self._geom.x, self._geom.y, self.width, self.height)
-        )
+
+        if self._clip_box is None:
+            clipbox = Box(self._geom.x, self._geom.y, self.width, self.height)
+        self.container.node.subsurface_tree_set_clip(self._clip_box or clipbox)
 
     def place(
         self,
@@ -306,13 +316,14 @@ class XdgWindow(Window[XdgSurface]):
         self._height = height
 
         self.container.node.set_position(x, y)
+
+        if needs_repos or has_border_changed:
+            self.paint_borders(bordercolor, borderwidth)
+
         if needs_repos:
             self.surface.set_size(width, height)
             self.surface.set_bounds(width, height)
             self.clip()
-
-        if needs_repos or has_border_changed:
-            self.paint_borders(bordercolor, borderwidth)
 
         if above:
             self.bring_to_front()
