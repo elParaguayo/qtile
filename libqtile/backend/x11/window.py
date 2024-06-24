@@ -19,11 +19,13 @@ from libqtile.backend.base import FloatStates
 from libqtile.backend.x11 import xcbq
 from libqtile.backend.x11.drawer import Drawer
 from libqtile.command.base import CommandError, expose_command
+from libqtile.config import ScreenRect
 from libqtile.log_utils import logger
 from libqtile.scratchpad import ScratchPad
 
 if TYPE_CHECKING:
     from libqtile.command.base import ItemT
+
 
 # ICCM Constants
 NoValue = 0x0000
@@ -476,6 +478,12 @@ class XWindow:
             core.CopyArea(pixmap, border, gc, borderwidth, 0, 0, most_h, most_w, borderwidth)
             core.CopyArea(pixmap, border, gc, 0, borderwidth, most_w, 0, borderwidth, most_h)
             core.ChangeWindowAttributes(self.wid, xcffib.xproto.CW.BorderPixmap, [border])
+
+    def set_clip(self, rect: ScreenRect):
+        self.conn.shape.clip_rectangle(self.wid, rect)
+
+    def clear_clip(self):
+        self.conn.shape.clear_clip(self.wid)
 
 
 class _Window:
@@ -2362,3 +2370,11 @@ class Window(_Window, base.Window):
         # priority group. If it's not there already, we need to move it.
         if self.fullscreen and not self.previous_layer[4]:
             self.change_layer()
+
+    @expose_command
+    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0):
+        self.window.set_clip(ScreenRect(x, y, w, h))
+
+    @expose_command
+    def clear_clip(self):
+        self.window.clear_clip()

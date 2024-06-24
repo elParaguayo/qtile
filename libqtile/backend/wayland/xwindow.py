@@ -66,6 +66,8 @@ class XWindow(Window[xwayland.Surface]):
         self.add_listener(surface.request_configure_event, self._on_request_configure)
         self.add_listener(surface.destroy_event, self._on_destroy)
 
+        self._clip_box: Box | None = None
+
     def _on_associate(self, _listener: Listener, _data: Any) -> None:
         logger.debug("Signal: xwindow associate")
         if wlr_surface := self.surface.surface:
@@ -310,6 +312,14 @@ class XWindow(Window[xwayland.Surface]):
             if self.ftm_handle:
                 self.ftm_handle.set_fullscreen(do_full)
 
+    @expose_command()
+    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0):
+        self._clip_box = Box(x, y, w, h)
+
+    @expose_command()
+    def clear_clip(self):
+        self._clip_box = None
+
     def clip(self) -> None:
         if not self.tree:
             return
@@ -317,7 +327,11 @@ class XWindow(Window[xwayland.Surface]):
             return
         if next(self.tree.children, None) is None:
             return
-        self.tree.node.subsurface_tree_set_clip(Box(0, 0, self._width, self._height))
+
+        if self._clip_box is None:
+            clipbox = Box(0, 0, self._width, self._height)
+
+        self.container.node.subsurface_tree_set_clip(self._clip_box or clipbox)
 
     def place(
         self,
@@ -384,11 +398,12 @@ class XWindow(Window[xwayland.Surface]):
 
         self.container.node.set_position(x, y)
         self.surface.configure(x, y, width, height)
-        if needs_repos:
-            self.clip()
 
         if needs_repos or has_border_changed:
             self.paint_borders(bordercolor, borderwidth)
+
+        if needs_repos:
+            self.clip()
 
         if above:
             self.bring_to_front()

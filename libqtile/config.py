@@ -398,6 +398,9 @@ class ScreenRect:
             self.__class__(self.x, self.y + rowheight, self.width, self.height - rowheight),
         )
 
+    def __iter__(self):
+        return (getattr(self, attr) for attr in ("x", "y", "width", "height"))
+
 
 class Screen(CommandObject):
     r"""

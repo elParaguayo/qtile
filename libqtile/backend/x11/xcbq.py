@@ -47,6 +47,7 @@ import cairocffi.pixbuf
 import cairocffi.xcb
 import xcffib
 import xcffib.randr
+import xcffib.shape
 import xcffib.xinerama
 import xcffib.xproto
 from xcffib.xfixes import SelectionEventMask
@@ -440,11 +441,41 @@ class XFixes:
         self.conn.xfixes.ext.SelectSelectionInput(window.wid, _selection, self.selection_mask)
 
 
+class Shape:
+    def __init__(self, conn):
+        self.ext = conn.conn(xcffib.shape.key)
+
+    def clear_clip(self, wid):
+        """Resets bounding area of window to its default."""
+        self.ext.Mask(
+            xcffib.shape.SO.Set,  # Shape Operation
+            xcffib.shape.SK.Bounding,  # Shape Kind
+            wid,  # Window
+            0,  # x offset
+            0,  # y offset
+            0,  # pixmap (0 = no pixmap)
+        )
+
+    def clip_rectangle(self, wid, rect):
+        """Clips bounding (visible) area of window to area specified by rect."""
+        self.ext.Rectangles(
+            xcffib.shape.SO.Set,  # Shape Operation
+            xcffib.shape.SK.Bounding,  # Shape Kind
+            xcffib.xproto.ClipOrdering.Unsorted,  # Clip Ordering
+            wid,  # Window
+            0,  # x offset
+            0,  # y offset
+            1,  # number of rectangles
+            [xcffib.xproto.RECTANGLE.synthetic(*rect)],  # rectangles
+        )
+
+
 class Connection:
     _extmap = {
         "xinerama": Xinerama,
         "randr": RandR,
         "xfixes": XFixes,
+        "shape": Shape,
     }
 
     def __init__(self, display):
