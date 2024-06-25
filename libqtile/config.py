@@ -384,6 +384,14 @@ class ScreenRect:
     width: int
     height: int
 
+    @property
+    def x2(self):
+        return self.x + self.width
+
+    @property
+    def y2(self):
+        return self.y + self.height
+
     def hsplit(self, columnwidth: int) -> tuple[ScreenRect, ScreenRect]:
         assert 0 < columnwidth < self.width
         return (
@@ -400,6 +408,26 @@ class ScreenRect:
 
     def __iter__(self):
         return (getattr(self, attr) for attr in ("x", "y", "width", "height"))
+
+    def __nonzero__(self):
+        return self.width != 0 and self.height != 0
+
+    # Rectangle subtraction code from here: https://stackoverflow.com/a/25068722
+    def intersects(self, other: ScreenRect) -> ScreenRect:
+        """Find intersection of two rectangles."""
+        a, b = self, other
+
+        # Find corners of intersecting area.
+        x1 = max(min(a.x, a.x2), min(b.x, b.x2))
+        y1 = max(min(a.y, a.y2), min(b.y, b.y2))
+        x2 = min(max(a.x, a.x2), max(b.x, b.x2))
+        y2 = min(max(a.y, a.y2), max(b.y, b.y2))
+
+        # If positive area then rectangles intersect
+        if x1 < x2 and y1 < y2:
+            return ScreenRect(x1, y1, x2 - x1, y2 - y1)
+
+        return ScreenRect(0, 0, 0, 0)
 
 
 class Screen(CommandObject):
