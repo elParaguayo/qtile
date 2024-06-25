@@ -43,6 +43,7 @@ from libqtile.backend.base import FloatStates
 from libqtile.backend.wayland.drawer import Drawer
 from libqtile.backend.wayland.wlrq import HasListeners
 from libqtile.command.base import CommandError, expose_command
+from libqtile.config import ScreenRect
 from libqtile.log_utils import logger
 
 try:
@@ -129,6 +130,7 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
         # Outer list: outside-in borders i.e. multiple for multiple borders
         self._borders: list[list[SceneRect]] = []
         self.bordercolor: ColorsType = "000000"
+        self._clip_box: Box | None = None
 
         # This is a placeholder to be set properly when the window maps for the first
         # time (and therefore exposed to the user). We need the attribute to exist so
@@ -357,15 +359,11 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
             color_ = _rgb(color)
             bw = widths[i]
 
-            # [x, y, width, height] for N, E, S, W
-            geometries = (
-                (coord, coord, outer_w - coord * 2, bw),
-                (outer_w - bw - coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
-                (coord, outer_h - bw - coord, outer_w - coord * 2, bw),
-                (coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
-            )
+            # ScreenRect(x, y, width, height) for N, E, S, W
+            # geometries will be clipped/removed if a clip area has been set
+            geometries = self.get_border_geometries(coord, bw, outer_w, outer_h)
 
-            if old_borders:
+            if old_borders and len(old_borders[0]) == len(geometries):
                 rects = old_borders.pop(0)
                 for (x, y, w, h), rect in zip(geometries, rects):
                     rect.set_color(color_)
@@ -392,6 +390,27 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
             self.tree.node.raise_to_top()
 
         self._borders = new_borders
+
+    def get_border_geometries(self, coord: int, bw: int, outer_w: int, outer_h: int) -> list[ScreenRect]:
+        geoms = (
+            ScreenRect(coord, coord, outer_w - coord * 2, bw),
+            ScreenRect(outer_w - bw - coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
+            ScreenRect(coord, outer_h - bw - coord, outer_w - coord * 2, bw),
+            ScreenRect(coord, bw + coord, bw, outer_h - bw * 2 - coord * 2),
+        )
+
+        if (box := self._clip_box) is None:
+            return geoms
+
+        cliprect = ScreenRect(box.x + bw, box.y + bw, box.width - 2 * bw, box.height - 2 * bw)
+
+        new_geoms = []
+
+        for geom in geoms:
+            if intersection := cliprect.intersects(geom):
+                new_geoms.append(intersection)
+
+        return new_geoms
 
     @property
     def opacity(self) -> float:
