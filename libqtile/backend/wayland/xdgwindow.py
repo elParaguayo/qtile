@@ -33,6 +33,7 @@ from libqtile.backend import base
 from libqtile.backend.base import FloatStates
 from libqtile.backend.wayland.window import Static, Window
 from libqtile.command.base import expose_command
+from libqtile.config import ScreenRect
 from libqtile.log_utils import logger
 
 try:
@@ -225,12 +226,40 @@ class XdgWindow(Window[XdgSurface]):
             hook.fire("client_urgent_hint_changed", self)
 
     @expose_command()
-    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0):
+    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0) -> None:
         self._clip_box = Box(x, y, w, h)
 
     @expose_command()
-    def clear_clip(self):
+    def clear_clip(self) -> None:
         self._clip_box = None
+
+    def clip_to_rect(self, win_rect: ScreenRect, clip_rect: ScreenRect, border: int = 0, margin: int | list[int] = 0) -> None:
+        if margin:
+            if isinstance(margin, int):
+                clip_rect.x += margin
+                clip_rect.y += margin
+                clip_rect.width -= (margin + border) * 2
+                clip_rect.height -= (margin + border) * 2
+            else:
+                clip_rect.x += margin[3]
+                clip_rect.y += margin[0]
+                clip_rect.width -= (margin[1] + margin[3])
+                clip_rect.height -= (margin[0] + margin[2])
+
+        # if border:
+        #     win_rect.x += border
+        #     win_rect.y += border
+        #     win_rect.width += border * 2
+        #     win_rect.height += border * 2
+
+
+        if intersection := win_rect.intersects(clip_rect):
+            intersection.x -= win_rect.x + border
+            intersection.y -= win_rect.y + border
+            # intersection.width -= win_rect.x 
+            # intersection.y -= win_rect.y 
+            print(win_rect, clip_rect, intersection)
+            self.set_clip(*intersection)       
 
     def clip(self) -> None:
         if not self.tree:
@@ -242,6 +271,7 @@ class XdgWindow(Window[XdgSurface]):
 
         if self._clip_box is None:
             clipbox = Box(self._geom.x, self._geom.y, self.width, self.height)
+
         self.container.node.subsurface_tree_set_clip(self._clip_box or clipbox)
 
     def place(
@@ -255,6 +285,8 @@ class XdgWindow(Window[XdgSurface]):
         above: bool = False,
         margin: int | list[int] | None = None,
         respect_hints: bool = False,
+        clip: bool = False,
+        clip_rect: ScreenRect | None = None
     ) -> None:
         # Adjust the placement to account for layout margins, if there are any.
         if margin is not None:
@@ -264,6 +296,13 @@ class XdgWindow(Window[XdgSurface]):
             y += margin[0]
             width -= margin[1] + margin[3]
             height -= margin[0] + margin[2]
+
+        if clip:
+            if clip_rect is None:
+                logger.warning("No clip_rect specified.")
+            else:
+                win_rect = ScreenRect(x, y, width, height)
+                self.clip_to_rect(win_rect, clip_rect, border=borderwidth, margin=margin)
 
         state = self.surface.toplevel._ptr.current
         if respect_hints:

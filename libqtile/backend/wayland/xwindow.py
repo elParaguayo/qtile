@@ -31,6 +31,7 @@ from libqtile.backend import base
 from libqtile.backend.base import FloatStates
 from libqtile.backend.wayland.window import Static, Window
 from libqtile.command.base import expose_command
+from libqtile.config import ScreenRect
 from libqtile.log_utils import logger
 
 if typing.TYPE_CHECKING:
@@ -344,6 +345,8 @@ class XWindow(Window[xwayland.Surface]):
         above: bool = False,
         margin: int | list[int] | None = None,
         respect_hints: bool = False,
+        clip: bool = False,
+        clip_rect: ScreenRect | None = None
     ) -> None:
         # Adjust the placement to account for layout margins, if there are any.
         if margin is not None:

@@ -402,12 +402,14 @@ class Window(typing.Generic[S], _Base, base.Window, HasListeners):
         if (box := self._clip_box) is None:
             return geoms
 
-        cliprect = ScreenRect(box.x + bw, box.y + bw, box.width - 2 * bw, box.height - 2 * bw)
+        cliprect = ScreenRect(0, 0, box.width + 2 * bw - box.x, box.height + 2 * bw - box.y)
+        print(cliprect, *geoms)
 
         new_geoms = []
 
         for geom in geoms:
             if intersection := cliprect.intersects(geom):
+                print(intersection)
                 new_geoms.append(intersection)
 
         return new_geoms
