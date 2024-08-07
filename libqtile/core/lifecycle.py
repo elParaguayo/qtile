@@ -19,6 +19,7 @@ class LifeCycle:
     # referenced here when atexit fires will NOT be finalized properly.
     def __init__(self) -> None:
         self.behavior = Behavior.NONE
+        self.exitcode: int = 0
         self.state_file: str | None = None
         atexit.register(self._atexit)
 
@@ -35,6 +36,7 @@ class LifeCycle:
             os.execv(sys.executable, argv)
         elif self.behavior is Behavior.TERMINATE:
             logger.warning("Qtile will now terminate")
+            os._exit(self.exitcode)
         elif self.behavior is Behavior.NONE:
             pass
 
