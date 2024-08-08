@@ -1444,7 +1444,14 @@ class Qtile(CommandObject):
 
     @expose_command()
     def shutdown(self, exitcode: int = 0) -> None:
-        """Quit Qtile"""
+        """Quit Qtile
+
+        Parameters
+        ==========
+        exitcode :
+            Set exit status of Qtile. Can be e.g. used to make login managers
+            poweroff or restart the system. (default: 0)
+        """
         self.stop(exitcode)
 
     @expose_command()
