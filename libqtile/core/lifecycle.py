@@ -36,7 +36,7 @@ class LifeCycle:
             os.execv(sys.executable, argv)
         elif self.behavior is Behavior.TERMINATE:
             logger.warning("Qtile will now terminate")
-            os._exit(self.exitcode)
+            sys.exit(self.exitcode)
         elif self.behavior is Behavior.NONE:
             pass
 
