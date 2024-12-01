@@ -25,11 +25,30 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import iwlib
+import re
+import subprocess
 
+try:
+    import iwlib
+
+    HAS_IWLIB = True
+except ModuleNotFoundError:
+    HAS_IWLIB = False
+
+from libqtile.confreader import ConfigError
 from libqtile.log_utils import logger
 from libqtile.pangocffi import markup_escape_text
 from libqtile.widget import base
+
+RE_SSID = re.compile(r"^SSID: (.*)$")  # assumes 'SSID' label is constant across languages
+RE_STRENGTH = re.compile(
+    r"^\S+: (-.*) dBm$"
+)  # just look for a dBm value to avoid language differences
+
+
+def convert_strength_string(strength):
+    value = int(strength)
+    return int(value + 110)
 
 
 def get_status(interface_name):
@@ -41,11 +60,53 @@ def get_status(interface_name):
     return essid, quality
 
 
+def get_iw_status(interface_name):
+    cmd = ["iw", "dev", interface_name, "link"]
+    proc = subprocess.run(cmd, capture_output=True, check=True)
+    ssid = ""
+    strength = ""
+    for line in proc.stdout.decode().split("\n"):
+        text = line.strip()
+        _ssid = RE_SSID.match(text)
+        _strength = RE_STRENGTH.match(text)
+
+        if not ssid and _ssid:
+            ssid = _ssid.group(1)
+        elif not strength and _strength:
+            strength = _strength.group(1)
+
+        if ssid and strength:
+            break
+
+    else:
+        if ssid or strength:
+            logger.warning(
+                "Could not retrieve both ssid and strength data from iw. ssid=%s, strength=%s",
+                ssid,
+                strength,
+            )
+        return None, None
+
+    try:
+        quality = convert_strength_string(strength)
+    except ValueError:
+        logger.error("Unexpected strength value: %s", strength)
+        return ssid, 0
+
+    return ssid, quality
+
+
 class Wlan(base.InLoopPollText):
     """
     Displays Wifi SSID and quality.
 
-    Widget requirements: iwlib_.
+    .. important::
+
+        Currently, the widget relies on iwlib_ to get this data. However, this library
+        relies on ``wireless-tools`` which is an unmaintained package. Distros are moving
+        towards using ``iw`` instead. This widget can also parse the output of ``iw`` by
+        setting ``use_iw=True``. Support for ``iwlib`` is likely to be removed in future
+        releases.
 
     .. _iwlib: https://pypi.org/project/iwlib/
     """
@@ -58,6 +119,7 @@ class Wlan(base.InLoopPollText):
             "eth0",
             "The ethernet interface to monitor, NOTE: If you do not have a wlan device in your system, ethernet functionality will not work, use the Net widget instead",
         ),
+        ("use_iw", False, "Get SSID and signal strength by parsing output from ``iw``"),
         ("update_interval", 1, "The update interval."),
         ("disconnected_message", "Disconnected", "String to show when the wlan is diconnected."),
         ("ethernet_message", "eth", "String to show when ethernet is being used"),
@@ -78,9 +140,23 @@ class Wlan(base.InLoopPollText):
         self.add_defaults(Wlan.defaults)
         self.ethernetInterfaceNotFound = False
 
+    def _configure(self, qtile, bar):
+        if not self.use_iw and not HAS_IWLIB:
+            raise ConfigError(
+                "iwlib module is not installed. Install module or set 'use_iw=True'."
+            )
+        base.InLoopPollText._configure(self, qtile, bar)
+
     def poll(self):
         try:
-            essid, quality = get_status(self.interface)
+            if self.use_iw:
+                try:
+                    essid, quality = get_iw_status(self.interface)
+                except subprocess.CalledProcessError:
+                    logger.error("Could not get wifi status. Error opening iw.")
+                    essid, quality = None, None
+            else:
+                essid, quality = get_status(self.interface)
             disconnected = essid is None
             if disconnected:
                 if self.use_ethernet:
