@@ -479,8 +479,8 @@ class XWindow:
             core.CopyArea(pixmap, border, gc, 0, borderwidth, most_w, 0, borderwidth, most_h)
             core.ChangeWindowAttributes(self.wid, xcffib.xproto.CW.BorderPixmap, [border])
 
-    def set_clip(self, rect: ScreenRect):
-        self.conn.shape.clip_rectangle(self.wid, rect)
+    def set_clip(self, bounding: ScreenRect, clip: ScreenRect):
+        self.conn.shape.clip_rectangle(self.wid, bounding, clip)
 
     def clear_clip(self):
         self.conn.shape.clear_clip(self.wid)
@@ -2372,8 +2372,22 @@ class Window(_Window, base.Window):
             self.change_layer()
 
     @expose_command
-    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0):
-        self.window.set_clip(ScreenRect(x, y, w, h))
+    def set_clip(self, x: int = 0, y: int = 0, w: int = 0, h: int = 0, border: int = 0):
+        clip = ScreenRect(0, 0, 0, 0)
+        # clip.x = max(x, self.x) - self.x
+        clip.x = x if x else border
+        clip.y = 0
+        # clip.width = self.width - (clip.x - self.x)
+        clip.width = w
+        clip.height = self.height
+
+        bounding = ScreenRect(*clip)
+        bounding.x = x
+        bounding.y -= border
+        bounding.width += border
+        bounding.height += border * 2
+
+        self.window.set_clip(bounding=bounding, clip=clip)
 
     @expose_command
     def clear_clip(self):

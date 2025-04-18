@@ -18,6 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 from libqtile.command.base import expose_command
+from libqtile.config import ScreenRect
 from libqtile.layout import base
 from libqtile.log_utils import logger
 
@@ -132,6 +133,7 @@ class Scroller(base.Layout):
         self.viewx = 0
         self.maxwidth = self.default_width
         self.columns = [Column(0, self.default_width)]
+        self.pw = 0
 
     @property
     def cc(self):
@@ -234,10 +236,15 @@ class Scroller(base.Layout):
         posx, posy, viewx, widths and heights are in percentages of screen
         dimensions.
         """
-        screenx = screen_rect.x
-        screeny = screen_rect.y
-        screenh = screen_rect.height
-        screenw = screen_rect.width
+        border = self.border_width
+        margin_size = self.margin
+
+        screenx = screen_rect.x + margin_size
+        screeny = screen_rect.y + margin_size
+        screenh = screen_rect.height - 2 * margin_size
+        screenw = screen_rect.width - 2 * margin_size
+
+        drawable_rect = ScreenRect(screenx, screeny, screenw, screenh)
 
         posx = -self.viewx
         for col in self.columns:
@@ -259,29 +266,37 @@ class Scroller(base.Layout):
         else:
             color = self.border_normal
 
-        border = self.border_width
-        margin_size = self.margin
-
         width = int(0.5 + col.width * screenw * 0.01)
         x = screenx + int(0.5 + posx * screenw * 0.01)
 
         height = int(0.5 + col.heights[client] * screenh * 0.01 / len(col))
         y = screeny + int(0.5 + posy * screenh * 0.01 / len(col))
 
-        # Iff some part of the window is visible, place it
-        if (x < screenx + screenw) and (x + width > 0):
+        win_rect = ScreenRect(x + margin_size, y + margin_size, width - 2 * (border + margin_size), height - 2 * (border + margin_size))
+
+        # If some part of the window is visible, place it
+        intersection = win_rect.intersects(drawable_rect)
+        client.clear_clip()
+        if intersection:
             w, h = width - 2 * border, height - 2 * border
+            client.place(
+                x, y, w, h, border, color, margin=margin_size
+            )
             clip = False
-            if x < screenx:
+            if client.x < screenx:
                 clip = True
-            elif (x + width) > (screenx + screenw):
+                clipx = screenx - client.x
+                clipw = client.width - clipx
+            elif (client.x + client.width) > (screenx + screenw):
                 clip = True
+                clipx = 0
+                clipw = client.width - ((client.x + client.width) - screenw)
             else:
                 client.clear_clip()
 
-            client.place(
-                x, y, w, h, border, color, margin=margin_size, clip=clip, clip_rect=screen_rect
-            )
+            if clip:
+                client.set_clip(clipx, screeny, clipw, screenh, border)
+
             client.unhide()
         else:
             client.hide()

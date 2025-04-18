@@ -446,7 +446,7 @@ class Shape:
         self.ext = conn.conn(xcffib.shape.key)
 
     def clear_clip(self, wid):
-        """Resets bounding area of window to its default."""
+        """Resets bounding and clips areas of window to defaults."""
         self.ext.Mask(
             xcffib.shape.SO.Set,  # Shape Operation
             xcffib.shape.SK.Bounding,  # Shape Kind
@@ -456,8 +456,17 @@ class Shape:
             0,  # pixmap (0 = no pixmap)
         )
 
-    def clip_rectangle(self, wid, rect):
-        """Clips bounding (visible) area of window to area specified by rect."""
+        self.ext.Mask(
+            xcffib.shape.SO.Set,  # Shape Operation
+            xcffib.shape.SK.Clip,  # Shape Kind
+            wid,  # Window
+            0,  # x offset
+            0,  # y offset
+            0,  # pixmap (0 = no pixmap)
+        )
+
+    def clip_rectangle(self, wid, bounding, clip):
+        """Clips bounding (inc border) and clip (contents) area of window to specified areas."""
         self.ext.Rectangles(
             xcffib.shape.SO.Set,  # Shape Operation
             xcffib.shape.SK.Bounding,  # Shape Kind
@@ -466,9 +475,19 @@ class Shape:
             0,  # x offset
             0,  # y offset
             1,  # number of rectangles
-            [xcffib.xproto.RECTANGLE.synthetic(*rect)],  # rectangles
+            [xcffib.xproto.RECTANGLE.synthetic(*bounding)],  # rectangles
         )
 
+        self.ext.Rectangles(
+            xcffib.shape.SO.Set,  # Shape Operation
+            xcffib.shape.SK.Clip,  # Shape Kind
+            xcffib.xproto.ClipOrdering.Unsorted,  # Clip Ordering
+            wid,  # Window
+            0,  # x offset
+            0,  # y offset
+            1,  # number of rectangles
+            [xcffib.xproto.RECTANGLE.synthetic(*clip)],  # rectangles
+        )
 
 class Connection:
     _extmap = {

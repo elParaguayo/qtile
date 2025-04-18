@@ -409,7 +409,7 @@ class ScreenRect:
     def __iter__(self):
         return (getattr(self, attr) for attr in ("x", "y", "width", "height"))
 
-    def __nonzero__(self):
+    def __bool__(self):
         return self.width != 0 and self.height != 0
 
     # Rectangle subtraction code from here: https://stackoverflow.com/a/25068722
