@@ -75,16 +75,17 @@ class Column(base._ClientList):
         cur = self.current
         return "Column: " + ", ".join(
             [
-                "[%s: %d]" % (c.name, self.heights[c])
-                if c == cur
-                else "%s: %d" % (c.name, self.heights[c])
+                (
+                    "[%s: %d]" % (c.name, self.heights[c])
+                    if c == cur
+                    else "%s: %d" % (c.name, self.heights[c])
+                )
                 for c in self.clients
             ]
         )
 
 
 class Scroller(base.Layout):
-
     """
     A modified version of the Columns layout.
 
@@ -237,12 +238,14 @@ class Scroller(base.Layout):
         dimensions.
         """
         border = self.border_width
-        margin_size = self.margin
+        margin_size = (
+            [self.margin] * 4 if isinstance(self.margin, int) else self.margin
+        )
 
-        screenx = screen_rect.x + margin_size
-        screeny = screen_rect.y + margin_size
-        screenh = screen_rect.height - 2 * margin_size
-        screenw = screen_rect.width - 2 * margin_size
+        screenx = screen_rect.x + margin_size[3]
+        screeny = screen_rect.y + margin_size[0]
+        screenh = screen_rect.height - (margin_size[0] + margin_size[2])
+        screenw = screen_rect.width - (margin_size[1] + margin_size[3])
 
         drawable_rect = ScreenRect(screenx, screeny, screenw, screenh)
 
@@ -266,37 +269,49 @@ class Scroller(base.Layout):
         else:
             color = self.border_normal
 
-        width = int(0.5 + col.width * screenw * 0.01)
-        x = screenx + int(0.5 + posx * screenw * 0.01)
+        width = int(0.5 + col.width * screen_rect.width * 0.01)
+        x = screen_rect.x + int(0.5 + posx * screen_rect.width * 0.01)
 
-        height = int(0.5 + col.heights[client] * screenh * 0.01 / len(col))
-        y = screeny + int(0.5 + posy * screenh * 0.01 / len(col))
+        height = int(0.5 + col.heights[client] * screen_rect.height * 0.01 / len(col))
+        y = screen_rect.y + int(0.5 + posy * screen_rect.height * 0.01 / len(col))
 
-        win_rect = ScreenRect(x + margin_size, y + margin_size, width - 2 * (border + margin_size), height - 2 * (border + margin_size))
+        win_rect = ScreenRect(
+            x + margin_size[3],
+            y + margin_size[0],
+            width - 2 * border - (margin_size[1] + margin_size[3]),
+            height - 2 * border - (margin_size[0] + margin_size[2]),
+        )
 
         # If some part of the window is visible, place it
         intersection = win_rect.intersects(drawable_rect)
         client.clear_clip()
         if intersection:
             w, h = width - 2 * border, height - 2 * border
-            client.place(
-                x, y, w, h, border, color, margin=margin_size
-            )
+            # win_x = x + margin_size[3]
+            # win_w = w - (margin_size[1] + margin_size[3])
             clip = False
-            if client.x < screenx:
+            if client.height != win_rect.height:
+                client.place(x, y, w, h, border, color, margin=margin_size)
+
+            if win_rect.x < screenx:
                 clip = True
-                clipx = screenx - client.x
-                clipw = client.width - clipx
-            elif (client.x + client.width) > (screenx + screenw):
+                clipx = screenx - win_rect.x - border
+                clipw = win_rect.width - clipx
+            elif (win_rect.x + win_rect.width) > (screenx + screenw):
                 clip = True
+                x -= border
                 clipx = 0
-                clipw = client.width - ((client.x + client.width) - screenw)
+                clipw = win_rect.width - ((win_rect.width + win_rect.x) - screenw) + 2 * border
+                
+                if clipw < 0:
+                    clipw = 0
             else:
                 client.clear_clip()
 
             if clip:
                 client.set_clip(clipx, screeny, clipw, screenh, border)
 
+            client.place(x, y, w, h, border, color, margin=margin_size)
             client.unhide()
         else:
             client.hide()
