@@ -20,12 +20,40 @@
 import sys
 from types import ModuleType
 
+import pytest
+
 from libqtile import widget
+from libqtile.bar import Bar
+from libqtile.config import Screen
+from test.helpers import BareConfig
 
 
 class MockXDG(ModuleType):
     def getIconPath(*args, **kwargs):  # noqa: N802
         pass
+
+
+@pytest.fixture
+def position(request):
+    return getattr(request, "param", "top")
+
+
+horizontal_and_vertical = pytest.mark.parametrize("position", ["top", "left"], indirect=True)
+
+
+@pytest.fixture
+def launchbar_manager(request, manager_nospawn, position):
+    config = getattr(request, "param", dict())
+
+    class LaunchBarConfig(BareConfig):
+        screens = [
+            Screen(
+                **{position: Bar([widget.LaunchBar(progs=[("test", "test", "")], **config)], 28)}
+            )
+        ]
+
+    manager_nospawn.start(LaunchBarConfig)
+    yield manager_nospawn
 
 
 def test_deprecated_configuration(caplog, monkeypatch):
@@ -36,3 +64,9 @@ def test_deprecated_configuration(caplog, monkeypatch):
     records = [r for r in caplog.records if r.msg.startswith("The use of")]
     assert records
     assert "The use of a positional argument in LaunchBar is deprecated." in records[0].msg
+
+
+@horizontal_and_vertical
+def test_tasklist_defaults(launchbar_manager):
+    widget = launchbar_manager.c.widget["launchbar"]
+    assert widget.info()["length"] > 0
