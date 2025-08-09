@@ -133,6 +133,7 @@ def keyboard_key_cb(keysym, mask, userdata):
 @ffi.def_extern()
 def manage_view_cb(view, userdata):
     core = ffi.from_handle(userdata)
+    print("Manage", view)
     core.handle_manage_view(view)
 
 
@@ -191,6 +192,7 @@ class Core(base.Core):
         log_utils.init_log(logger.level, log_path=log_utils.get_default_log(), logger=qw_logger)
         lib.qw_log_init(get_wlr_log_level(), lib.log_cb)
         self.qw = lib.qw_server_create()
+
         if not self.qw:
             sys.exit(1)
 
@@ -268,7 +270,7 @@ class Core(base.Core):
             win.name = ffi.string(view.title).decode()
         if view.app_id != ffi.NULL:
             win._wm_class = ffi.string(view.app_id).decode()
-        win._float_width = win.width # todo: should we be using getter/setter for _float_width
+        win._float_width = win.width  # todo: should we be using getter/setter for _float_width
         win._float_height = win.height
 
         self.qtile.manage(win)
@@ -326,7 +328,9 @@ class Core(base.Core):
                 self.qtile.current_group.focus(win, False)
 
         else:
-            screen = self.qtile.find_screen(int(self.qw_cursor.cursor.x), int(self.qw_cursor.cursor.y))
+            screen = self.qtile.find_screen(
+                int(self.qw_cursor.cursor.x), int(self.qw_cursor.cursor.y)
+            )
             if screen:
                 self.qtile.focus_screen(screen.index, warp=False)
 
