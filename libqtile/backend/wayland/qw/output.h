@@ -1,12 +1,29 @@
 #ifndef OUTPUT_H
 #define OUTPUT_H
 
+#include <cairo/cairo.h>
 #include <wayland-server-core.h>
 #include <wlr/backend/headless.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 
 struct qw_server;
+
+struct qw_output_background_wallpaper {
+    struct wlr_scene_buffer *buffer;
+    cairo_surface_t *surface;
+};
+
+struct qw_output_background_color {
+    float color[4];
+    struct wlr_scene_rect *rect;
+};
+
+struct qw_output_background {
+    struct qw_output_background_color *color_rect;
+    struct qw_output_background_wallpaper *wallpaper;
+};
 
 struct qw_output {
     struct qw_server *server;
@@ -24,10 +41,15 @@ struct qw_output {
     struct wl_listener request_state;
     struct wl_listener destroy;
     struct wl_list layers[4];
+    struct qw_output_background background;
 };
 
 void qw_output_arrange_layers(struct qw_output *output);
 
 void qw_server_output_new(struct qw_server *server, struct wlr_output *wlr_output);
+
+void qw_output_paint_wallpaper(struct qw_output *output, cairo_surface_t *source, int mode);
+
+void qw_output_paint_background_color(struct qw_output *output, float color[4]);
 
 #endif /* OUTPUT_H */

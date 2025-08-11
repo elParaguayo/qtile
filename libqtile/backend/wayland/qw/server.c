@@ -16,6 +16,9 @@
 #include "wlr/util/log.h"
 #include "xdg-view.h"
 
+#include <cairo/cairo.h>
+#include <wlr/render/wlr_texture.h>
+
 // Get the file descriptor of the Wayland event loop (used for epoll integration)
 int qw_server_get_event_loop_fd(struct qw_server *server) {
     return wl_event_loop_get_fd(server->event_loop);
@@ -534,4 +537,41 @@ static void qw_server_query_iterator(struct wlr_scene_buffer *buffer, int sx, in
 // Iterate visible views in ascending Z order
 void qw_server_loop_visible_views(struct qw_server *server, node_wid_cb_t cb) {
     wlr_scene_node_for_each_buffer(&server->scene->tree.node, qw_server_query_iterator, cb);
+}
+
+
+struct wl_list *qw_server_get_outputs(struct qw_server *server) {
+    return &server->outputs;
+}
+
+
+struct qw_output *qw_server_get_output_at_pos(struct qw_server *server, int x, int y) {
+    struct qw_output *o;
+    wl_list_for_each(o, &server->outputs, link) {
+        if (!o->wlr_output || !o->wlr_output->enabled) {
+            continue;
+        }
+        if (o->x == x && o->y == y) {
+            return o;
+        }
+    };
+    wlr_log(WLR_ERROR, "Cannot find output at %d,%d.", x, y);
+    return NULL;
+}
+
+void qw_server_paint_wallpaper(struct qw_server *server, int x, int y, cairo_surface_t *source,
+                               int mode) {
+    struct qw_output *o = qw_server_get_output_at_pos(server, x, y);
+
+    if (o != NULL) {
+        qw_output_paint_wallpaper(o, source, mode);
+    }
+}
+
+void qw_server_paint_background_color(struct qw_server *server, int x, int y, float color[4]) {
+    struct qw_output *o = qw_server_get_output_at_pos(server, x, y);
+
+    if (o != NULL) {
+        qw_output_paint_background_color(o, color);
+    }
 }

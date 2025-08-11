@@ -156,3 +156,117 @@ void qw_server_output_new(struct qw_server *server, struct wlr_output *wlr_outpu
         wlr_output_layout_add_auto(server->output_layout, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_layout, l_output, output->scene);
 }
+
+void qw_output_paint_wallpaper(struct qw_output *output, cairo_surface_t *source, int mode) {
+    // Note: libqtile.backend.wayland.core.Painter owns the reference to the source surface
+    // so we don't destroy it in this function.
+
+    // Get dimensions of source image and screen
+    int img_width = cairo_image_surface_get_width(source);
+    int img_height = cairo_image_surface_get_height(source);
+    int o_width, o_height;
+    wlr_output_effective_resolution(output->wlr_output, &o_width, &o_height);
+
+    // Calculate x and y scaling factors
+    double scale_x = (double)o_width / img_width;
+    double scale_y = (double)o_height / img_height;
+
+    // Create a new surface sized to output size
+    cairo_surface_t *wallpaper_surface =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, o_width, o_height);
+    cairo_t *cr = cairo_create(wallpaper_surface);
+
+    switch (mode) {
+
+    // We don't touch the image and draw it at 0, 0
+    case WALLPAPER_MODE_ORIGINAL:
+        break;
+
+    // Fill screen as best as possible while preserving aspect ratio
+    // Image is centered on screen
+    case WALLPAPER_MODE_FILL:
+        cairo_rectangle(cr, 0, 0, o_width, o_height);
+        cairo_clip(cr);
+
+        if ((scale_x * img_height) > o_height) {
+            cairo_translate(cr, 0, -(img_height * scale_x - o_height) / 2);
+            cairo_scale(cr, scale_x, scale_x);
+        } else {
+            cairo_translate(cr, -(img_width * scale_y - o_width) / 2, 0);
+            cairo_scale(cr, scale_y, scale_y);
+        }
+        break;
+
+    // Scale image to screen - don't preserve aspect ratio
+    case WALLPAPER_MODE_STRETCH:
+        cairo_scale(cr, scale_x, scale_y);
+        break;
+
+    // Center image on screen but don't scale image
+    case WALLPAPER_MODE_CENTER:
+        int t_x = (o_width - img_width) / 2;
+        int t_y = (o_height - img_height) / 2;
+        cairo_translate(cr, t_x, t_y);
+        break;
+
+    default:
+        wlr_log(WLR_ERROR, "Unexpected wallpaper mode.");
+        cairo_destroy(cr);
+        cairo_surface_destroy(wallpaper_surface);
+        return;
+    }
+
+    // Paint the modified image to our wallpaper image
+    cairo_set_source_surface(cr, source, 0, 0);
+    cairo_paint(cr);
+
+    // Get data and stride from scaled surface
+    unsigned char *data = cairo_image_surface_get_data(wallpaper_surface);
+    int stride = cairo_image_surface_get_stride(wallpaper_surface);
+
+    // Create wlr_buffer from scaled surface data
+    struct wlr_buffer *buffer = cairo_buffer_create(o_width, o_height, stride, data);
+    if (!buffer) {
+        wlr_log(WLR_ERROR, "Failed to create wlr_buffer from scaled surface");
+        cairo_surface_destroy(wallpaper_surface);
+        return;
+    }
+
+    struct wlr_scene_buffer *scene_buf =
+        wlr_scene_buffer_create(output->server->scene_wallpaper_tree, buffer);
+
+    if (!output->background.wallpaper) {
+        output->background.wallpaper = calloc(1, sizeof(struct qw_output_background_wallpaper));
+        if (!output->background.wallpaper) {
+            wlr_log(WLR_ERROR, "Failed to allocate memorey for wallpaper image.");
+            wlr_buffer_drop(buffer);
+            cairo_surface_destroy(wallpaper_surface);
+            return;
+        }
+    }
+
+    // Save references to scene buffer and wallpaper so we can destroy them later
+    output->background.wallpaper->buffer = scene_buf;
+    output->background.wallpaper->surface = wallpaper_surface;
+
+    // Tidy up objects
+    // scene_buffer takes its own ref to the buffer, drop ours
+    wlr_buffer_drop(buffer);
+
+    // Destroy unneeded cairo objects
+    cairo_destroy(cr);
+
+    // Place the wallpaper
+    wlr_scene_node_set_position(&scene_buf->node, output->x, output->y);
+}
+
+void qw_output_paint_background_color(struct qw_output *output, float color[4]) {
+    int o_width, o_height;
+    wlr_output_effective_resolution(output->wlr_output, &o_width, &o_height);
+    struct wlr_scene_rect *rect =
+        wlr_scene_rect_create(output->server->scene_wallpaper_tree, o_width, o_height, color);
+    if (!rect) {
+        wlr_log(WLR_ERROR, "Failed to create scene_rect for background.");
+    }
+    wlr_scene_node_set_position(&rect->node, output->x, output->y);
+}
