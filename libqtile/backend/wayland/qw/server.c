@@ -10,6 +10,7 @@
 #include "layer-view.h"
 #include "output.h"
 #include "server.h"
+#include "session-lock.h"
 #include "view.h"
 #include "wayland-server-core.h"
 #include "wayland-server-protocol.h"
@@ -476,6 +477,7 @@ void qw_server_set_keymap(struct qw_server *server, const char *layout, const ch
         qw_keyboard_set_keymap(keyboard, layout, options, variant);
     }
 }
+
 // Create and initialize the server object with all components and listeners.
 struct qw_server *qw_server_create() {
     wlr_log_init(WLR_INFO, NULL);
@@ -571,6 +573,10 @@ struct qw_server *qw_server_create() {
     wl_signal_add(&server->layer_shell->events.new_surface, &server->new_layer_surface);
     server->renderer_lost.notify = qw_server_handle_renderer_lost;
     wl_signal_add(&server->renderer->events.lost, &server->renderer_lost);
+
+    server->lock_manager = wlr_session_lock_manager_v1_create(server->display);
+    server->new_session_lock.notify = qw_session_lock_handle_new;
+    wl_signal_add(&server->lock_manager->events.new_lock, &server->new_session_lock);
 
 #if WLR_HAS_XWAYLAND
     server->xwayland = wlr_xwayland_create(server->display, server->compositor, true);

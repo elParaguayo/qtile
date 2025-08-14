@@ -32,6 +32,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
@@ -152,6 +153,11 @@ struct qw_server {
     struct wl_listener new_decoration;
     struct wl_listener new_layer_surface;
     struct wl_listener request_cursor;
+    struct wl_listener new_session_lock;
+    static struct wlr_session_lock_manager_v1 *lock_manager;
+    static struct wlr_scene_rect *locked_background;
+    static struct wlr_session_lock_v1 *lock;
+    bool locked;
 #if WLR_HAS_XWAYLAND
     struct wlr_xwayland *xwayland;
     struct wl_listener new_xwayland_surface;

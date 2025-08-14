@@ -7,6 +7,7 @@
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_session_lock_v1.h>
 
 struct qw_server;
 
@@ -47,6 +48,7 @@ struct qw_output {
     struct wl_listener destroy;
     struct wl_list layers[4];
     struct qw_output_background background;
+    struct wlr_session_lock_surface_v1 *lock_surface;
 };
 
 void qw_output_arrange_layers(struct qw_output *output);
