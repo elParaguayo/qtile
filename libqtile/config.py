@@ -1219,6 +1219,7 @@ class DropDown(configurable.Configurable):
             True,
             "DropDown will be brought to the front of the screen when shown.",
         ),
+        ("keep_above", True, "DropDown will be kept above other windows."),
     )
 
     def __init__(self, name: str, cmd: str, **config: Any) -> None:
@@ -1251,4 +1252,6 @@ class DropDown(configurable.Configurable):
             opacity=self.opacity,
             on_focus_lost_hide=self.on_focus_lost_hide,
             warp_pointer=self.warp_pointer,
+            bring_to_front=self.bring_to_front,
+            keep_above=self.keep_above,
         )
