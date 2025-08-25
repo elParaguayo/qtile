@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import wlroots.ffi_build as wlr
 from cffi import FFI
@@ -31,4 +32,4 @@ ffi.cdef(libinput.CDEF)
 ffi.cdef(cairo_buffer.CDEF)
 
 if __name__ == "__main__":
-    ffi.compile()
+    ffi.compile(tmpdir=Path(__file__).parent.parent.parent.parent.parent.as_posix())
