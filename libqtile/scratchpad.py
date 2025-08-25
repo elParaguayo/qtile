@@ -180,6 +180,7 @@ class DropDownToggler(WindowVisibilityToggler):
         self.height = ddconfig.height
         self.border_width = window.qtile.config.floating_layout.border_width
         self.bring_to_front = ddconfig.bring_to_front
+        self.keep_above = ddconfig.keep_above
 
         # add "SKIP_TASKBAR" to _NET_WM_STATE atom (for X11)
         if window.qtile.core.name == "x11":
@@ -226,6 +227,8 @@ class DropDownToggler(WindowVisibilityToggler):
             win.place(x, y, width, height, self.border_width, win.bordercolor, respect_hints=True)
             if self.bring_to_front:
                 win.bring_to_front()
+            if self.keep_above:
+                win.keep_above()
             # Toggle the dropdown
             WindowVisibilityToggler.show(self)
 
