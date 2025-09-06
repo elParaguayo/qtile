@@ -478,6 +478,7 @@ static void qw_handle_activation_request(struct wl_listener *listener, void *dat
 
     wlr_log(WLR_INFO, "Activation token valid, focusing view");
     qw_xdg_view_focus(view, 1);
+    qw_server_update_focused_view(&view->base);
 }
 
 void qw_server_set_keymap(struct qw_server *server, const char *layout, const char *options,
@@ -730,4 +731,14 @@ static void qw_server_traverse_scene_node(struct wlr_scene_node *node,
 void qw_server_traverse_scene_graph(struct qw_server *server, node_info_cb_t cb) {
     struct wlr_scene_node *root = &server->scene->tree.node;
     qw_server_traverse_scene_node(root, server->scene_windows_layers, cb, NULL);
+}
+
+void qw_server_update_focused_view(struct qw_view *view) {
+    // Handle any steps for window that's losing focus
+    if (view->server->focused_view != NULL) {
+        struct qw_view *previous_focus = view->server->focused_view;
+    }
+
+    // Handle actions for window that's gaining focus
+    view->server->focused_view = view;
 }

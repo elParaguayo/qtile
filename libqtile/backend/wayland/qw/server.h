@@ -140,6 +140,7 @@ struct qw_server {
     on_input_device_added_cb_t on_input_device_added_cb;
     void *view_urgent_cb_data;
     void *cb_data;
+    struct qw_view *focused_view;
 
     // Private data
     struct wl_event_loop *event_loop;
@@ -233,5 +234,7 @@ void qw_server_paint_background_color(struct qw_server *server, int x, int y, fl
 
 void qw_server_loop_input_devices(struct qw_server *server, input_device_cb_t cb);
 void qw_server_traverse_scene_graph(struct qw_server *server, node_info_cb_t cb);
+
+void qw_server_update_focused_view(struct qw_view *view);
 
 #endif /* SERVER_H */
