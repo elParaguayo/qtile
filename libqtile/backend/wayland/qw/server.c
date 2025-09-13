@@ -611,6 +611,11 @@ struct qw_server *qw_server_create() {
     // Setup foreign toplevel manager
     server->ftl_mgr = wlr_foreign_toplevel_manager_v1_create(server->display);
 
+    // Setup image capture ('1' indicates that cursor should be included in capture)
+    server->image_copy_capture_manager =
+        wlr_ext_image_copy_capture_manager_v1_create(server->display, 1);
+    wlr_ext_output_image_capture_source_manager_v1_create(server->display, 1);
+
 #if WLR_HAS_XWAYLAND
     server->xwayland = wlr_xwayland_create(server->display, server->compositor, true);
     server->new_xwayland_surface.notify = qw_server_handle_new_xwayland_surface;
