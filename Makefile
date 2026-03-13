@@ -28,7 +28,7 @@ deps: ## Install all of qtile's dependencies.
 .PHONY: check
 check: deps ## Run the test suite on the latest python
 	uv run ./libqtile/backend/wayland/cffi/build.py
-	uv run $(UV_PYTHON_ARG) $(TEST_RUNNER) $(PYTEST_BACKEND_ARG)
+	uv run $(UV_PYTHON_ARG) $(TEST_RUNNER) $(PYTEST_BACKEND_ARG) test/test_manager.py
 
 .PHONY: docs
 docs: deps ## Run the sphinx build for the html docs.

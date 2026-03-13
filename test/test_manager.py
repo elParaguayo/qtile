@@ -547,6 +547,11 @@ def test_nextprevgroup_reload(manager_nospawn):
     # Current group will become unmanaged after reloading
     manager_nospawn.c.eval("self.old_group = self.current_group")
     manager_nospawn.c.reload_config()
+    print("self.screens=")
+    print(manager_nospawn.c.eval("self.screens"))
+    print("self.old_group.screen=")
+    print(manager_nospawn.c.eval("self.old_group.screen"))
+    # breakpoint()
     # Check that group has become unmanaged
     manager_nospawn.c.eval("self.new_group = self.current_group")
     assert manager_nospawn.c.eval("self.old_group != self.new_group") == "True"
