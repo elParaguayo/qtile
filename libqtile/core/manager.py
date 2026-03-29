@@ -13,9 +13,11 @@ import socket
 import tempfile
 import time
 from collections import defaultdict
+from collections.abc import Sequence
 from logging.handlers import RotatingFileHandler
+from os import PathLike
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import libqtile
 from libqtile import bar, hook, ipc, utils
@@ -58,9 +60,8 @@ from libqtile.utils import (
 from libqtile.widget.base import _Widget
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
-    from os import PathLike
-    from typing import Any, Literal
+    from collections.abc import Callable
+    from typing import Any
 
     from libqtile.command.base import ItemT
     from libqtile.confreader import Config
