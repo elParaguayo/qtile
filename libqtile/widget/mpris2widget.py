@@ -522,6 +522,10 @@ class Mpris2(base._TextBox):
             self.metadata = self.get_track_info(metadata.value)
             if self.needs_position:
                 self.metadata["position"] = self.time_formatter(*_to_hms(self.position))
+
+            if self.player is not None:
+                self.metadata["qtile:player"] = self.player
+
             self.set_track_info()
 
         self.do_display()
@@ -549,7 +553,7 @@ class Mpris2(base._TextBox):
             if isinstance(val, str):
                 m[new_key] = val
             elif isinstance(val, list):
-                m[new_key] = self.separator.join((y for y in val if isinstance(y, str)))
+                m[new_key] = self.separator.join(y for y in val if isinstance(y, str))
             elif key == "mpris:length" and isinstance(val, int):
                 m[new_key] = self.time_formatter(*_to_hms(val // 1e6))
 
