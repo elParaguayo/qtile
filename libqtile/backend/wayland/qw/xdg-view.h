@@ -41,9 +41,14 @@ struct qw_xdg_view {
     struct wl_listener new_popup;
     struct {
         bool active;
+        bool needs_repos;
         long start_time;
         Vec2 start_pos;
         Vec2 target_pos;
+        int start_width;
+        int start_height;
+        int target_width;
+        int target_height;
         double duration;
     } anim;
     struct wl_event_source *anim_timer;
@@ -82,6 +87,6 @@ void qw_server_xdg_view_new(struct qw_server *server, struct wlr_xdg_toplevel *x
 void qw_xdg_view_focus(void *self, int above);
 
 void qw_xdg_activation_new_token(struct wl_listener *listener, void *data);
-void view_animation_step(struct qw_xdg_view *view);
+void qw_xdg_view_animation_step(struct qw_xdg_view *xdg_view);
 
 #endif /* XDG_VIEW_H */

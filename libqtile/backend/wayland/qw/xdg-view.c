@@ -234,24 +234,62 @@ static long get_time_ms() {
     return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-void view_animation_step(struct qw_xdg_view *view) {
-    if (!view->anim.active)
+static void set_buffer_render_size(struct wlr_scene_buffer *buffer, int sx, int sy,
+                                   void *user_data) {
+    UNUSED(sx);
+    UNUSED(sy);
+
+    Vec2 *size = user_data;
+    if (size->x <= 0 || size->y <= 0) {
+        wlr_scene_buffer_set_dest_size(buffer, 0, 0);
+    } else {
+        wlr_scene_buffer_set_dest_size(buffer, (int)size->x, (int)size->y);
+    }
+    wlr_scene_buffer_set_filter_mode(buffer, WLR_SCALE_FILTER_BILINEAR);
+}
+
+static void apply_view_scale(struct qw_xdg_view *xdg_view, int w, int h) {
+    Vec2 size = {.x = w, .y = h};
+    wlr_scene_node_for_each_buffer(&xdg_view->base.content_tree->node, set_buffer_render_size,
+                                   &size);
+}
+
+void qw_xdg_view_animation_step(struct qw_xdg_view *xdg_view) {
+    if (!xdg_view->anim.active)
         return;
 
     long now = get_time_ms();
-    double elapsed = (double)(now - view->anim.start_time);
-
-    if (elapsed >= view->anim.duration) {
-        wlr_scene_node_set_position(&view->base.content_tree->node, view->anim.target_pos.x,
-                                    view->anim.target_pos.y);
-        view->anim.active = false;
-        return;
-    }
+    double elapsed = (double)(now - xdg_view->anim.start_time);
+    double t = elapsed / xdg_view->anim.duration;
+    if (t > 1.0)
+        t = 1.0;
+    double eased_t = ease_out_quint(t);
 
     Vec2 curr;
-    update_position(view->anim.start_pos, view->anim.target_pos, elapsed, view->anim.duration,
-                    &curr);
-    wlr_scene_node_set_position(&view->base.content_tree->node, (int)curr.x, (int)curr.y);
+    update_position(xdg_view->anim.start_pos, xdg_view->anim.target_pos, elapsed,
+                    xdg_view->anim.duration, &curr);
+    wlr_scene_node_set_position(&xdg_view->base.content_tree->node, (int)curr.x, (int)curr.y);
+
+    if (xdg_view->anim.needs_repos) {
+        int cur_w = (int)lerp(xdg_view->anim.start_width, xdg_view->anim.target_width, eased_t);
+        int cur_h = (int)lerp(xdg_view->anim.start_height, xdg_view->anim.target_height, eased_t);
+        apply_view_scale(xdg_view, cur_w, cur_h);
+    }
+
+    if (elapsed >= xdg_view->anim.duration) {
+        wlr_scene_node_set_position(&xdg_view->base.content_tree->node, xdg_view->anim.target_pos.x,
+                                    xdg_view->anim.target_pos.y);
+
+        if (xdg_view->anim.needs_repos) {
+            apply_view_scale(xdg_view, 0, 0);
+            qw_xdg_view_clip(xdg_view);
+            qw_view_resize_ftl_output_tracking_buffer(&xdg_view->base, xdg_view->anim.target_width,
+                                                      xdg_view->anim.target_height);
+        }
+
+        xdg_view->anim.active = false;
+        return;
+    }
 }
 
 // Place the xdg_view at given position and size with border and stacking info
@@ -275,8 +313,13 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
     xdg_view->anim.start_pos = (Vec2){xdg_view->base.x, xdg_view->base.y};
     xdg_view->anim.target_pos = (Vec2){x, y};
     xdg_view->anim.start_time = get_time_ms();
+    xdg_view->anim.start_width = xdg_view->base.width;
+    xdg_view->anim.start_height = xdg_view->base.height;
+    xdg_view->anim.target_width = width;
+    xdg_view->anim.target_height = height;
     xdg_view->anim.duration = 200.0;
     xdg_view->anim.active = true;
+    xdg_view->anim.needs_repos = needs_repos;
 
     // Update stored geometry and base view rectangle
     xdg_view->geom = geom;
@@ -286,12 +329,7 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
     xdg_view->base.height = height;
 
     if (needs_repos) {
-        // Resize the toplevel surface and apply clipping if needed
         wlr_xdg_toplevel_set_size(xdg_view->xdg_toplevel, width, height);
-        qw_xdg_view_clip(xdg_view);
-
-        // Resize the foreign toplevel output tracking buffer
-        qw_view_resize_ftl_output_tracking_buffer(&xdg_view->base, width, height);
     }
 
     // Paint borders around the view with given border colors and width

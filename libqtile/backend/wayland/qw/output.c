@@ -22,7 +22,7 @@ static void qw_output_handle_frame(struct wl_listener *listener, void *data) {
         if (view->base.view_type == QW_VIEW_XDG) {
             struct qw_xdg_view *xdg_view = (struct qw_xdg_view *)view;
             if (xdg_view->anim.active) {
-                view_animation_step(xdg_view);
+                qw_xdg_view_animation_step(xdg_view);
             }
         }
     }
