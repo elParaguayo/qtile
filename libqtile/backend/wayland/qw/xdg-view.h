@@ -18,6 +18,10 @@ struct qw_xdg_activation_token {
     struct wl_listener destroy;
 };
 
+typedef struct {
+    int x, y;
+} Vec2;
+
 // Struct representing an XDG toplevel view in the compositor
 struct qw_xdg_view {
     struct qw_view base;
@@ -35,6 +39,15 @@ struct qw_xdg_view {
     struct wl_listener set_title;
     struct wl_listener set_app_id;
     struct wl_listener new_popup;
+    struct {
+        bool active;
+        long start_time;
+        Vec2 start_pos;
+        Vec2 target_pos;
+        double duration;
+    } anim;
+    struct wl_event_source *anim_timer;
+    struct wl_list link;
     // TODO: add listeners for move and resize requests
 
     // Listeners for client decoration protocol events
@@ -69,5 +82,6 @@ void qw_server_xdg_view_new(struct qw_server *server, struct wlr_xdg_toplevel *x
 void qw_xdg_view_focus(void *self, int above);
 
 void qw_xdg_activation_new_token(struct wl_listener *listener, void *data);
+void view_animation_step(struct qw_xdg_view *view);
 
 #endif /* XDG_VIEW_H */

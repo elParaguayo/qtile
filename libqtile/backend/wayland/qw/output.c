@@ -6,21 +6,30 @@
 #include "server.h"
 #include "session-lock.h"
 #include "util.h"
+#include "xdg-view.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 static void qw_output_handle_frame(struct wl_listener *listener, void *data) {
     UNUSED(data);
-
-    // Called when the output is ready to display a new frame
     struct qw_output *output = wl_container_of(listener, output, frame);
-    struct wlr_scene *scene = output->server->scene;
+    struct qw_server *server = output->server;
+    struct wlr_scene *scene = server->scene;
+
+    // Update all active animations
+    struct qw_xdg_view *view;
+    wl_list_for_each(view, &server->views, link) {
+        if (view->base.view_type == QW_VIEW_XDG) {
+            struct qw_xdg_view *xdg_view = (struct qw_xdg_view *)view;
+            if (xdg_view->anim.active) {
+                view_animation_step(xdg_view);
+            }
+        }
+    }
 
     struct wlr_scene_output *scene_output = wlr_scene_get_scene_output(scene, output->wlr_output);
-
     wlr_scene_output_commit(scene_output, NULL);
 
-    // Send a frame done event with the current time
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);

@@ -119,6 +119,7 @@ static void qw_xdg_view_handle_destroy(struct wl_listener *listener, void *data)
 
     struct qw_xdg_view *xdg_view = wl_container_of(listener, xdg_view, destroy);
 
+    wl_list_remove(&xdg_view->link);
     wl_list_remove(&xdg_view->map.link);
     wl_list_remove(&xdg_view->unmap.link);
     wl_list_remove(&xdg_view->commit.link);
@@ -204,6 +205,55 @@ static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
     wlr_scene_subsurface_tree_set_clip(&xdg_view->scene_tree->node, &clip);
 }
 
+static double ease_out_quint(double t) {
+    if (t < 0.0)
+        return 0.0;
+    if (t > 1.0)
+        return 1.0;
+
+    double inv_t = 1.0 - t;
+    return 1.0 - (inv_t * inv_t * inv_t * inv_t * inv_t);
+}
+
+static inline double lerp(double start, double end, double amount) {
+    return start + amount * (end - start);
+}
+
+static void update_position(Vec2 start, Vec2 end, double elapsed_ms, double duration_ms,
+                            Vec2 *current) {
+    double t = elapsed_ms / duration_ms;
+    double eased_t = ease_out_quint(t);
+
+    current->x = lerp(start.x, end.x, eased_t);
+    current->y = lerp(start.y, end.y, eased_t);
+}
+
+static long get_time_ms() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+void view_animation_step(struct qw_xdg_view *view) {
+    if (!view->anim.active)
+        return;
+
+    long now = get_time_ms();
+    double elapsed = (double)(now - view->anim.start_time);
+
+    if (elapsed >= view->anim.duration) {
+        wlr_scene_node_set_position(&view->base.content_tree->node, view->anim.target_pos.x,
+                                    view->anim.target_pos.y);
+        view->anim.active = false;
+        return;
+    }
+
+    Vec2 curr;
+    update_position(view->anim.start_pos, view->anim.target_pos, elapsed, view->anim.duration,
+                    &curr);
+    wlr_scene_node_set_position(&view->base.content_tree->node, (int)curr.x, (int)curr.y);
+}
+
 // Place the xdg_view at given position and size with border and stacking info
 static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
                               const struct qw_border *borders, int border_count, int above) {
@@ -222,15 +272,18 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
 
     bool needs_repos = place_changed || geom_changed;
 
+    xdg_view->anim.start_pos = (Vec2){xdg_view->base.x, xdg_view->base.y};
+    xdg_view->anim.target_pos = (Vec2){x, y};
+    xdg_view->anim.start_time = get_time_ms();
+    xdg_view->anim.duration = 200.0;
+    xdg_view->anim.active = true;
+
     // Update stored geometry and base view rectangle
     xdg_view->geom = geom;
     xdg_view->base.x = x;
     xdg_view->base.y = y;
     xdg_view->base.width = width;
     xdg_view->base.height = height;
-
-    // Set position of the content scene node
-    wlr_scene_node_set_position(&xdg_view->base.content_tree->node, x, y);
 
     if (needs_repos) {
         // Resize the toplevel surface and apply clipping if needed
@@ -716,4 +769,6 @@ void qw_server_xdg_view_new(struct qw_server *server, struct wlr_xdg_toplevel *x
 
     xdg_view->new_popup.notify = qw_xdg_view_handle_new_popup;
     wl_signal_add(&xdg_toplevel->base->events.new_popup, &xdg_view->new_popup);
+
+    wl_list_insert(&server->views, &xdg_view->link);
 }

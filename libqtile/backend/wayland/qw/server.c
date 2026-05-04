@@ -866,6 +866,7 @@ struct qw_server *qw_server_create() {
     wl_signal_add(&server->idle_inhibit_manager->events.new_inhibitor, &server->new_idle_inhibitor);
 
     server->idle_notifier = wlr_idle_notifier_v1_create(server->display);
+    wl_list_init(&server->views);
 
     // Initialize idle timers list
     wl_list_init(&server->idle_timers);
