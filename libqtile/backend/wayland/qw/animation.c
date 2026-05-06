@@ -14,7 +14,7 @@ static double qw_anim_ease_out_quint(double t) {
     return 1.0 - (inv_t * inv_t * inv_t * inv_t * inv_t);
 }
 
-static inline double lerp(double start, double end, double amount) {
+static inline double qw_anim_lerp(double start, double end, double amount) {
     return start + amount * (end - start);
 }
 
@@ -23,8 +23,8 @@ static void qw_anim_update_position(Vec2 start, Vec2 end, double elapsed_ms, dou
     double t = elapsed_ms / duration_ms;
     double eased_t = qw_anim_ease_out_quint(t);
 
-    current->x = lerp(start.x, end.x, eased_t);
-    current->y = lerp(start.y, end.y, eased_t);
+    current->x = qw_anim_lerp(start.x, end.x, eased_t);
+    current->y = qw_anim_lerp(start.y, end.y, eased_t);
 }
 
 long qw_anim_get_time_ms() {
@@ -92,8 +92,10 @@ void qw_anim_step(struct qw_view *base) {
     wlr_scene_node_set_position(&base->content_tree->node, (int)curr.x, (int)curr.y);
 
     if (base->anim.needs_repos) {
-        int cur_w = (int)lerp(base->anim.start_width, base->anim.target_width, c_state.eased_t);
-        int cur_h = (int)lerp(base->anim.start_height, base->anim.target_height, c_state.eased_t);
+        int cur_w =
+            (int)qw_anim_lerp(base->anim.start_width, base->anim.target_width, c_state.eased_t);
+        int cur_h =
+            (int)qw_anim_lerp(base->anim.start_height, base->anim.target_height, c_state.eased_t);
         qw_anim_apply_view_scale(base, cur_w, cur_h);
     }
 

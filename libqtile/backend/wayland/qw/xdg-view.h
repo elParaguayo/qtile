@@ -71,6 +71,5 @@ void qw_xdg_view_focus(void *self, int above);
 
 void qw_xdg_activation_new_token(struct wl_listener *listener, void *data);
 void qw_xdg_view_animation_step(struct qw_xdg_view *xdg_view);
-void qw_xdg_view_clip(struct qw_xdg_view *xdg_view);
 
 #endif /* XDG_VIEW_H */

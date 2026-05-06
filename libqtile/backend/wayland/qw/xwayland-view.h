@@ -1,7 +1,6 @@
 #ifndef QW_XWAYLAND_VIEW
 #define QW_XWAYLAND_VIEW
 
-#include "animation.h"
 #include <stdbool.h>
 #include <view.h>
 #include <wayland-server-core.h>

@@ -135,6 +135,8 @@ static void qw_xdg_view_handle_destroy(struct wl_listener *listener, void *data)
     free(xdg_view);
 }
 
+static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view);
+
 // Handle commit event: called when surface commits state changes
 static void qw_xdg_view_handle_commit(struct wl_listener *listener, void *data) {
     UNUSED(data);
@@ -178,7 +180,7 @@ static void qw_xdg_view_handle_commit(struct wl_listener *listener, void *data) 
 }
 
 // Clip the xdg_view's scene tree if needed
-void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
+static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
     // Only clip if scene_tree exists, node is disabled, and node is linked
     if (!xdg_view->scene_tree) {
         return;
