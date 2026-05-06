@@ -7,6 +7,8 @@
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_scene.h>
 
+#include "animation.h"
+
 // TODO: avoid this duplication
 // View states representing window states, similar to backend/base/window.py
 enum qw_view_state {
@@ -70,6 +72,9 @@ struct qw_border {
 
 struct qw_view {
     struct qw_server *server;
+    qw_anim anim;
+    void (*on_anim_complete)(struct qw_view *self);
+    int layer;
     int x;
     int y;
     int width;
@@ -115,6 +120,7 @@ struct qw_view {
     int (*get_parent)(void *self);
 
     // Private data: pointer to an array of 4 pointers to wlr_scene_rect for borders
+    struct wl_list link;
     struct {
         enum qw_border_type type;
         uint32_t width;

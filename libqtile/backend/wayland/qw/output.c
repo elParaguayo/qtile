@@ -1,4 +1,5 @@
 #include "output.h"
+#include "animation.h"
 #include "cairo-buffer.h"
 #include "cursor.h"
 #include "layer-view.h"
@@ -7,7 +8,6 @@
 #include "session-lock.h"
 #include "util.h"
 #include "xdg-view.h"
-#include <stdio.h>
 #include <stdlib.h>
 
 static void qw_output_handle_frame(struct wl_listener *listener, void *data) {
@@ -17,13 +17,10 @@ static void qw_output_handle_frame(struct wl_listener *listener, void *data) {
     struct wlr_scene *scene = server->scene;
 
     // Update all active animations
-    struct qw_xdg_view *view;
+    struct qw_view *view;
     wl_list_for_each(view, &server->views, link) {
-        if (view->base.view_type == QW_VIEW_XDG) {
-            struct qw_xdg_view *xdg_view = (struct qw_xdg_view *)view;
-            if (xdg_view->anim.active) {
-                qw_xdg_view_animation_step(xdg_view);
-            }
+        if (view->anim.active) {
+            qw_anim_step(view);
         }
     }
 

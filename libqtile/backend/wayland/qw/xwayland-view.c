@@ -324,6 +324,9 @@ static void qw_xwayland_view_place(void *self, int x, int y, int width, int heig
 
     bool needs_repos = place_changed || geom_changed;
 
+    qw_anim_fill(&xwayland_view->base.anim, &xwayland_view->base, x, y, width, height, 200,
+                 needs_repos);
+
     // Update stored geometry and base view rectangle
     xwayland_view->geom = geom;
     xwayland_view->base.x = x;
@@ -607,6 +610,8 @@ static void qw_xwayland_view_handle_map(struct wl_listener *listener, void *data
     xwayland_view->base.role = xwayland_surface->role;
 
     xwayland_view->base.skip_taskbar = xwayland_surface->skip_taskbar;
+    xwayland_view->base.on_anim_complete = (void (*)(struct qw_view *))qw_xwayland_view_clip;
+    wl_list_insert(&xwayland_view->base.server->views, &xwayland_view->base.link);
 
     // Create foreign toplevel manager and listeners
     if (xwayland_view->base.ftl_handle == NULL) {
@@ -670,6 +675,7 @@ static void qw_xwayland_view_handle_unmap(struct wl_listener *listener, void *da
                                                  xwayland_view->base.server->cb_data);
     qw_xwayland_view_hide(xwayland_view);
 
+    wl_list_remove(&xwayland_view->base.link);
     wl_list_remove(&xwayland_view->commit.link);
     wl_list_remove(&xwayland_view->request_fullscreen.link);
     wl_list_remove(&xwayland_view->request_minimize.link);

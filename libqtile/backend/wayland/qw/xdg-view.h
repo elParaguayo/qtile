@@ -2,6 +2,7 @@
 #define XDG_VIEW_H
 
 // Include the generic view base struct and Wayland/WLRoots core and types
+#include "animation.h"
 #include "output.h"
 #include "view.h"
 #include <wayland-server-core.h>
@@ -17,10 +18,6 @@ struct qw_xdg_activation_token {
     bool qw_valid_seat;
     struct wl_listener destroy;
 };
-
-typedef struct {
-    int x, y;
-} Vec2;
 
 // Struct representing an XDG toplevel view in the compositor
 struct qw_xdg_view {
@@ -39,20 +36,6 @@ struct qw_xdg_view {
     struct wl_listener set_title;
     struct wl_listener set_app_id;
     struct wl_listener new_popup;
-    struct {
-        bool active;
-        bool needs_repos;
-        long start_time;
-        Vec2 start_pos;
-        Vec2 target_pos;
-        int start_width;
-        int start_height;
-        int target_width;
-        int target_height;
-        double duration;
-    } anim;
-    struct wl_event_source *anim_timer;
-    struct wl_list link;
     // TODO: add listeners for move and resize requests
 
     // Listeners for client decoration protocol events
@@ -88,5 +71,6 @@ void qw_xdg_view_focus(void *self, int above);
 
 void qw_xdg_activation_new_token(struct wl_listener *listener, void *data);
 void qw_xdg_view_animation_step(struct qw_xdg_view *xdg_view);
+void qw_xdg_view_clip(struct qw_xdg_view *xdg_view);
 
 #endif /* XDG_VIEW_H */

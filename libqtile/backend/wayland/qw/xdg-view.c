@@ -107,6 +107,7 @@ static void qw_xdg_view_handle_unmap(struct wl_listener *listener, void *data) {
                                             xdg_view->base.server->cb_data);
     qw_xdg_view_hide(xdg_view);
 
+    wl_list_remove(&xdg_view->base.link);
     wl_list_remove(&xdg_view->request_maximize.link);
     wl_list_remove(&xdg_view->request_fullscreen.link);
     wl_list_remove(&xdg_view->set_title.link);
@@ -119,7 +120,6 @@ static void qw_xdg_view_handle_destroy(struct wl_listener *listener, void *data)
 
     struct qw_xdg_view *xdg_view = wl_container_of(listener, xdg_view, destroy);
 
-    wl_list_remove(&xdg_view->link);
     wl_list_remove(&xdg_view->map.link);
     wl_list_remove(&xdg_view->unmap.link);
     wl_list_remove(&xdg_view->commit.link);
@@ -134,8 +134,6 @@ static void qw_xdg_view_handle_destroy(struct wl_listener *listener, void *data)
 
     free(xdg_view);
 }
-
-static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view);
 
 // Handle commit event: called when surface commits state changes
 static void qw_xdg_view_handle_commit(struct wl_listener *listener, void *data) {
@@ -180,7 +178,7 @@ static void qw_xdg_view_handle_commit(struct wl_listener *listener, void *data) 
 }
 
 // Clip the xdg_view's scene tree if needed
-static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
+void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
     // Only clip if scene_tree exists, node is disabled, and node is linked
     if (!xdg_view->scene_tree) {
         return;
@@ -205,93 +203,6 @@ static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
     wlr_scene_subsurface_tree_set_clip(&xdg_view->scene_tree->node, &clip);
 }
 
-static double ease_out_quint(double t) {
-    if (t < 0.0)
-        return 0.0;
-    if (t > 1.0)
-        return 1.0;
-
-    double inv_t = 1.0 - t;
-    return 1.0 - (inv_t * inv_t * inv_t * inv_t * inv_t);
-}
-
-static inline double lerp(double start, double end, double amount) {
-    return start + amount * (end - start);
-}
-
-static void update_position(Vec2 start, Vec2 end, double elapsed_ms, double duration_ms,
-                            Vec2 *current) {
-    double t = elapsed_ms / duration_ms;
-    double eased_t = ease_out_quint(t);
-
-    current->x = lerp(start.x, end.x, eased_t);
-    current->y = lerp(start.y, end.y, eased_t);
-}
-
-static long get_time_ms() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-static void set_buffer_render_size(struct wlr_scene_buffer *buffer, int sx, int sy,
-                                   void *user_data) {
-    UNUSED(sx);
-    UNUSED(sy);
-
-    Vec2 *size = user_data;
-    if (size->x <= 0 || size->y <= 0) {
-        wlr_scene_buffer_set_dest_size(buffer, 0, 0);
-    } else {
-        wlr_scene_buffer_set_dest_size(buffer, (int)size->x, (int)size->y);
-    }
-    wlr_scene_buffer_set_filter_mode(buffer, WLR_SCALE_FILTER_BILINEAR);
-}
-
-static void apply_view_scale(struct qw_xdg_view *xdg_view, int w, int h) {
-    Vec2 size = {.x = w, .y = h};
-    wlr_scene_node_for_each_buffer(&xdg_view->base.content_tree->node, set_buffer_render_size,
-                                   &size);
-}
-
-void qw_xdg_view_animation_step(struct qw_xdg_view *xdg_view) {
-    if (!xdg_view->anim.active)
-        return;
-
-    long now = get_time_ms();
-    double elapsed = (double)(now - xdg_view->anim.start_time);
-    double t = elapsed / xdg_view->anim.duration;
-    if (t > 1.0)
-        t = 1.0;
-    double eased_t = ease_out_quint(t);
-
-    Vec2 curr;
-    update_position(xdg_view->anim.start_pos, xdg_view->anim.target_pos, elapsed,
-                    xdg_view->anim.duration, &curr);
-    wlr_scene_node_set_position(&xdg_view->base.content_tree->node, (int)curr.x, (int)curr.y);
-
-    if (xdg_view->anim.needs_repos) {
-        int cur_w = (int)lerp(xdg_view->anim.start_width, xdg_view->anim.target_width, eased_t);
-        int cur_h = (int)lerp(xdg_view->anim.start_height, xdg_view->anim.target_height, eased_t);
-        apply_view_scale(xdg_view, cur_w, cur_h);
-    }
-
-    if (elapsed >= xdg_view->anim.duration) {
-        wlr_scene_node_set_position(&xdg_view->base.content_tree->node, xdg_view->anim.target_pos.x,
-                                    xdg_view->anim.target_pos.y);
-
-        if (xdg_view->anim.needs_repos) {
-            apply_view_scale(xdg_view, 0, 0);
-            qw_xdg_view_clip(xdg_view);
-            qw_view_resize_ftl_output_tracking_buffer(&xdg_view->base, xdg_view->anim.target_width,
-                                                      xdg_view->anim.target_height);
-        }
-
-        xdg_view->anim.active = false;
-        return;
-    }
-}
-
 // Place the xdg_view at given position and size with border and stacking info
 static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
                               const struct qw_border *borders, int border_count, int above) {
@@ -310,16 +221,7 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
 
     bool needs_repos = place_changed || geom_changed;
 
-    xdg_view->anim.start_pos = (Vec2){xdg_view->base.x, xdg_view->base.y};
-    xdg_view->anim.target_pos = (Vec2){x, y};
-    xdg_view->anim.start_time = get_time_ms();
-    xdg_view->anim.start_width = xdg_view->base.width;
-    xdg_view->anim.start_height = xdg_view->base.height;
-    xdg_view->anim.target_width = width;
-    xdg_view->anim.target_height = height;
-    xdg_view->anim.duration = 200.0;
-    xdg_view->anim.active = true;
-    xdg_view->anim.needs_repos = needs_repos;
+    qw_anim_fill(&xdg_view->base.anim, &xdg_view->base, x, y, width, height, 200, needs_repos);
 
     // Update stored geometry and base view rectangle
     xdg_view->geom = geom;
@@ -556,6 +458,8 @@ static void qw_xdg_view_handle_map(struct wl_listener *listener, void *data) {
     xdg_view->base.height = geom.height;
     xdg_view->base.title = xdg_view->xdg_toplevel->title;
     xdg_view->base.app_id = xdg_view->xdg_toplevel->app_id;
+    xdg_view->base.on_anim_complete = (void (*)(struct qw_view *))qw_xdg_view_clip;
+    wl_list_insert(&xdg_view->base.server->views, &xdg_view->base.link);
 
     struct wlr_xdg_toplevel *xdg_toplevel = xdg_view->xdg_toplevel;
 
@@ -807,6 +711,4 @@ void qw_server_xdg_view_new(struct qw_server *server, struct wlr_xdg_toplevel *x
 
     xdg_view->new_popup.notify = qw_xdg_view_handle_new_popup;
     wl_signal_add(&xdg_toplevel->base->events.new_popup, &xdg_view->new_popup);
-
-    wl_list_insert(&server->views, &xdg_view->link);
 }
