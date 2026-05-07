@@ -216,10 +216,7 @@ class Base(base._Window):
         # TODO: respect hints
 
         if duration is None:
-            if not self._placed:
-                duration = self.qtile.config.wl_spawn_duration
-            else:
-                duration = 0
+            duration = self.qtile.config.wl_spawn_duration or 0
 
         if self.group is not None and self.group.screen is not None:
             self.float_x = x - self.group.screen.x
@@ -263,7 +260,6 @@ class Base(base._Window):
         self.bordercolor = bordercolor
         self.borderwidth = borderwidth
         self._ptr.place(self._ptr, x, y, width, height, c_layers, n, int(above), duration)
-        self._placed = True
 
     @expose_command()
     def focus(self, warp: bool = True) -> None:
