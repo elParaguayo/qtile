@@ -109,7 +109,7 @@ struct qw_view {
     void (*update_maximized)(void *self, bool maximize);
     void (*update_minimized)(void *self, bool minimize);
     void (*place)(void *self, int x, int y, int width, int height, const struct qw_border *borders,
-                  int border_count, int above);
+                  int border_count, int above, int duration);
     void (*focus)(void *self, int warp);
     void (*kill)(void *self);
     void (*hide)(void *self);

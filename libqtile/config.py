@@ -626,9 +626,12 @@ class Screen(CommandObject):
                             win.height,
                             win.borderwidth,
                             win.bordercolor,
+                            duration=self.qtile.config.wl_slide_group_duration,
                         )
                     old_group.screen = None
-                    old_group._hide_timer = self.qtile.call_later(0.2, old_group.hide)
+                    old_group._hide_timer = self.qtile.call_later(
+                        self.qtile.config.wl_slide_group_duration / 1000.0, old_group.hide
+                    )
 
                     # Slide in new group
                     new_group.set_screen(self, warp)
@@ -642,6 +645,7 @@ class Screen(CommandObject):
                             win.height,
                             win.borderwidth,
                             win.bordercolor,
+                            duration=0,
                         )
                         # Animate to target
                         win.place(
@@ -651,6 +655,7 @@ class Screen(CommandObject):
                             win.height,
                             win.borderwidth,
                             win.bordercolor,
+                            duration=self.qtile.config.wl_slide_group_duration,
                         )
             else:
                 with self.qtile.core.masked():

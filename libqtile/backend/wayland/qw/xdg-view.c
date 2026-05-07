@@ -207,7 +207,8 @@ static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
 
 // Place the xdg_view at given position and size with border and stacking info
 static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
-                              const struct qw_border *borders, int border_count, int above) {
+                              const struct qw_border *borders, int border_count, int above,
+                              int duration) {
     struct qw_xdg_view *xdg_view = (struct qw_xdg_view *)self;
     struct wlr_xdg_surface *surface = xdg_view->xdg_toplevel->base;
     struct wlr_xdg_toplevel_state state = xdg_view->xdg_toplevel->current;
@@ -223,7 +224,7 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
 
     bool needs_repos = place_changed || geom_changed;
 
-    qw_anim_fill(&xdg_view->base.anim, &xdg_view->base, x, y, width, height, 200, needs_repos);
+    qw_anim_fill(&xdg_view->base.anim, &xdg_view->base, x, y, width, height, duration, needs_repos);
 
     // Update stored geometry and base view rectangle
     xdg_view->geom = geom;

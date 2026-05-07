@@ -209,6 +209,10 @@ wl_input_rules = None
 wl_xcursor_theme = None
 wl_xcursor_size = 24
 
+# Durations (in ms) for Wayland animations
+wl_slide_group_duration = 200
+wl_spawn_duration = 200
+
 idle_timers = []  # type: list
 idle_inhibitors = []  # type: list
 

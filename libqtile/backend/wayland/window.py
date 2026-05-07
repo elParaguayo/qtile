@@ -47,6 +47,7 @@ class Base(base._Window):
         self._opacity = 1.0
         if self._ptr != ffi.NULL:
             self._ptr.opacity = 1.0
+        self._placed = False
 
     def _grab_click(self) -> None:
         lib.qw_view_grab_click(self._ptr)
@@ -187,6 +188,7 @@ class Base(base._Window):
         above: bool = False,
         margin: int | list[int] | None = None,
         respect_hints: bool = False,
+        duration: int | None = None,
     ) -> None:
         # Adjust the placement to account for layout margins, if there are any.
         # TODO: is respect_hints only for X11?
@@ -212,6 +214,12 @@ class Base(base._Window):
             height -= margin[0] + margin[2]
 
         # TODO: respect hints
+
+        if duration is None:
+            if not self._placed:
+                duration = self.qtile.config.wl_spawn_duration
+            else:
+                duration = 0
 
         if self.group is not None and self.group.screen is not None:
             self.float_x = x - self.group.screen.x
@@ -254,7 +262,8 @@ class Base(base._Window):
 
         self.bordercolor = bordercolor
         self.borderwidth = borderwidth
-        self._ptr.place(self._ptr, x, y, width, height, c_layers, n, int(above))
+        self._ptr.place(self._ptr, x, y, width, height, c_layers, n, int(above), duration)
+        self._placed = True
 
     @expose_command()
     def focus(self, warp: bool = True) -> None:
@@ -990,14 +999,18 @@ class Static(Base, base.Static):
         above: bool = False,
         margin: int | list[int] | None = None,
         respect_hints: bool = False,
+        duration: int | None = None,
     ) -> None:
         self.x = x
         self.y = y
         self._width = width
         self._height = height
 
+        if duration is None:
+            duration = 0
+
         n = 0
-        self._ptr.place(self._ptr, x, y, width, height, ffi.NULL, n, int(above))
+        self._ptr.place(self._ptr, x, y, width, height, ffi.NULL, n, int(above), duration)
 
     @expose_command()
     def info(self) -> dict:

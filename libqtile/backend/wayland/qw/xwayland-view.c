@@ -300,7 +300,8 @@ static void qw_xwayland_view_clip(struct qw_xwayland_view *xwayland_view) {
 
 // Place the xwayland_view at given position and size with border and stacking info
 static void qw_xwayland_view_place(void *self, int x, int y, int width, int height,
-                                   const struct qw_border *borders, int border_count, int above) {
+                                   const struct qw_border *borders, int border_count, int above,
+                                   int duration) {
     struct qw_xwayland_view *xwayland_view = (struct qw_xwayland_view *)self;
     struct wlr_xwayland_surface *qw_xsurface = xwayland_view->xwayland_surface;
 
@@ -324,7 +325,7 @@ static void qw_xwayland_view_place(void *self, int x, int y, int width, int heig
 
     bool needs_repos = place_changed || geom_changed;
 
-    qw_anim_fill(&xwayland_view->base.anim, &xwayland_view->base, x, y, width, height, 200,
+    qw_anim_fill(&xwayland_view->base.anim, &xwayland_view->base, x, y, width, height, duration,
                  needs_repos);
 
     // Update stored geometry and base view rectangle

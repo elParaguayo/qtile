@@ -53,6 +53,8 @@ class Config:
     wl_input_rules: dict[str, Any] | None
     wl_xcursor_theme: str | None
     wl_xcursor_size: int
+    wl_slide_group_duration: int
+    wl_spawn_duration: int
     idle_timers: list[IdleTimer]
     idle_inhibitors: list[IdleInhibitor]
     fake_screens: list[Screen] | None
