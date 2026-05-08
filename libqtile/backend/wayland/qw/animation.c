@@ -14,6 +14,28 @@ static double qw_anim_ease_out_quint(double t) {
     return 1.0 - (inv_t * inv_t * inv_t * inv_t * inv_t);
 }
 
+static double qw_anim_bounce_out(float t) {
+    if (t >= 1.0)
+        return 1.0;
+    if (t <= 0.0)
+        return 0.0;
+
+    if (t < (1.0f / 2.75f)) {
+        return 7.5625f * t * t;
+    } else if (t < (2.0f / 2.75f)) {
+        t -= (1.5f / 2.75f);
+        return 7.5625f * t * t + 0.75f;
+    } else if (t < (2.5f / 2.75f)) {
+        t -= (2.25f / 2.75f);
+        return 7.5625f * t * t + 0.9375f;
+    } else {
+        t -= (2.625f / 2.75f);
+        return 7.5625f * t * t + 0.984375f;
+    }
+}
+
+static double qw_anim_bounce_in(float t) { return 1.0f - qw_anim_bounce_out(1.0f - t); }
+
 static inline double qw_anim_lerp(double start, double end, double amount) {
     return start + amount * (end - start);
 }

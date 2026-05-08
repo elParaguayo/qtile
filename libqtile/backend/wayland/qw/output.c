@@ -16,11 +16,14 @@ static void qw_output_handle_frame(struct wl_listener *listener, void *data) {
     struct qw_server *server = output->server;
     struct wlr_scene *scene = server->scene;
 
+    bool anim_running = false;
+
     // Update all active animations
     struct qw_view *view;
     wl_list_for_each(view, &server->views, link) {
         if (view->anim.active) {
             qw_anim_step(view);
+            anim_running = true;
         }
     }
 
@@ -30,6 +33,10 @@ static void qw_output_handle_frame(struct wl_listener *listener, void *data) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
+
+    if (anim_running) {
+        wlr_output_schedule_frame(output->wlr_output);
+    }
 }
 
 static void qw_output_handle_destroy(struct wl_listener *listener, void *data) {
