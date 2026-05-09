@@ -1,0 +1,262 @@
+diff --git a/libqtile/backend/wayland/qw/animation.c b/libqtile/backend/wayland/qw/animation.c
+index ae61f079..356ad6ea 100644
+--- a/libqtile/backend/wayland/qw/animation.c
++++ b/libqtile/backend/wayland/qw/animation.c
+@@ -4,17 +4,182 @@
+ #include "xdg-view.h"
+ #include <time.h>
+ 
++static double qw_ease_out(qw_easing_func_t ease_in, double t)
++{
++    return 1.0 - ease_in(1.0 - t);
++}
++
++static double qw_ease_in_out(qw_easing_func_t ease_in, double t)
++{
++    if (t < 0.5) {
++        return ease_in(2.0 * t) / 2.0;
++    }
++
++    return 1.0 - ease_in(2.0 - 2.0 * t) / 2.0;
++}
++
++static double cubic_bezier(double x1, double y1, double x2, double y2, double t) {
++    if (t <= 0.0) return 0.0;
++    if (t >= 1.0) return 1.0;
++
++    double u = t; 
++    // Newton-Raphson iteration to find the parametric value 'u' for time 't'
++    for (int i = 0; i < 8; i++) {
++        double om_u = 1.0 - u;      // "One Minus U"
++        double om_u2 = om_u * om_u; // (1-u)^2
++        double u2 = u * u;          // u^2
++
++        // Standard Cubic Bezier: x = 3*(1-u)^2*u*x1 + 3*(1-u)*u^2*x2 + u^3
++        double current_x = (3.0 * om_u2 * u * x1) + 
++                           (3.0 * om_u * u2 * x2) + 
++                           (u2 * u);
++        
++        // Derivative: dx/du = 3*(1-u)^2*x1 + 6*(1-u)*u*(x2-x1) + 3*u^2*(1-x2)
++        double dx = (3.0 * om_u2 * x1) + 
++                    (6.0 * om_u * u * (x2 - x1)) + 
++                    (3.0 * u2 * (1.0 - x2));
++
++        if (fabs(dx) < 1e-6) break;
++        u -= (current_x - t) / dx;
++    }
++
++    // Clamp u safety
++    if (u < 0.0) u = 0.0;
++    if (u > 1.0) u = 1.0;
++
++    // Calculate final y using the discovered u
++    double om_u = 1.0 - u;
++    double om_u2 = om_u * om_u;
++    double u2 = u * u;
++
++    // y = 3*(1-u)^2*u*y1 + 3*(1-u)*u^2*y2 + u^3
++    return (3.0 * om_u2 * u * y1) + 
++           (3.0 * om_u * u2 * y2) + 
++           (u2 * u);
++}
++
++static double qw_anim_ease_in_sine(double t) {
++    return cubic_bezier(0.12, 0, 0.39, 0, t);
++}
++
++static double qw_anim_ease_out_sine(double t) {
++    return qw_ease_out(qw_anim_ease_in_sine, t);
++}
++
++static double qw_anim_ease_in_out_sine(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_sine, t);
++}
++
++static double qw_anim_ease_in_cubic(double t) {
++    return t * t * t;
++}
++
++static double qw_anim_ease_out_cubic(double t) {
++    return qw_ease_out(qw_anim_ease_in_cubic, t);
++}
++
++static double qw_anim_ease_in_out_cubic(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_cubic, t);
++}
++
++static double qw_anim_ease_in_quint(double t) {
++    return t * t * t * t * t;
++}
++
+ static double qw_anim_ease_out_quint(double t) {
+-    if (t < 0.0)
++    return qw_ease_out(qw_anim_ease_in_quint, t);
++}
++
++static double qw_anim_ease_in_out_quint(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_quint, t);
++}
++
++static double qw_anim_ease_in_circ(double t) {
++    return cubic_bezier(0.55, 0, 1, 0.45, t);
++}
++
++static double qw_anim_ease_out_circ(double t) {
++    return qw_ease_out(qw_anim_ease_in_circ, t);
++}
++
++static double qw_anim_ease_in_out_circ(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_circ, t);
++}
++
++static double qw_anim_ease_in_elastic(double t) {
++    const double c4 = (2.0 * M_PI) / 3.0;
++
++    if (t <= 0.0) {
+         return 0.0;
+-    if (t > 1.0)
++    }
++
++    if (t >= 1.0) {
+         return 1.0;
++    }
++
++    return -exp2(10.0 * t - 10.0) *
++        sin((t * 10.0 - 10.75) * c4);
++}
++
++static double qw_anim_ease_out_elastic(double t) {
++    return qw_ease_out(qw_anim_ease_in_elastic, t);
++}
++
++static double qw_anim_ease_in_out_elastic(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_elastic, t);
++}
++
++static double qw_anim_ease_in_quad(double t) {
++    return t * t;
++}
++
++static double qw_anim_ease_out_quad(double t) {
++    return qw_ease_out(qw_anim_ease_in_quad, t);
++}
++
++static double qw_anim_ease_in_out_quad(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_quad, t);
++}
++
++static double qw_anim_ease_in_quart(double t) {
++    return t * t * t * t;
++}
+ 
+-    double inv_t = 1.0 - t;
+-    return 1.0 - (inv_t * inv_t * inv_t * inv_t * inv_t);
++static double qw_anim_ease_out_quart(double t) {
++    return qw_ease_out(qw_anim_ease_in_quart, t);
+ }
+ 
+-static double qw_anim_bounce_out(float t) {
++static double qw_anim_ease_in_out_quart(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_quart, t);
++}
++
++static double qw_anim_ease_in_expo(double t) {
++    return cubic_bezier(0.7, 0, 0.84, 0, t);
++}
++static double qw_anim_ease_out_expo(double t) {
++    return qw_ease_out(qw_anim_ease_in_expo, t);
++}
++
++static double qw_anim_ease_in_out_expo(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_expo, t);
++}
++
++static double qw_anim_ease_in_back(double t) {
++    const double c1 = 1.70158;
++    const double c3 = c1 + 1;
++
++    return c3 * t * t * t - c1 * t * t;
++}
++
++static double qw_anim_ease_out_back(double t) {
++    return qw_ease_out(qw_anim_ease_in_back, t);
++}
++
++static double qw_anim_ease_in_out_back(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_back, t);
++}
++
++static double qw_anim_ease_out_bounce(double t) {
+     if (t >= 1.0)
+         return 1.0;
+     if (t <= 0.0)
+@@ -34,7 +199,15 @@ static double qw_anim_bounce_out(float t) {
+     }
+ }
+ 
+-static double qw_anim_bounce_in(float t) { return 1.0f - qw_anim_bounce_out(1.0f - t); }
++static double qw_anim_ease_in_bounce(double t) {
++    // The qw_ease_out wrapper just reverses the input function
++    return qw_ease_out(qw_anim_ease_out_bounce, t);
++}
++
++static double qw_anim_ease_in_out_bounce(double t) {
++    return qw_ease_in_out(qw_anim_ease_in_bounce, t);
++}
++
+ 
+ static inline double qw_anim_lerp(double start, double end, double amount) {
+     return start + amount * (end - start);
+diff --git a/libqtile/backend/wayland/qw/animation.h b/libqtile/backend/wayland/qw/animation.h
+index de0cd8fa..6c635cd7 100644
+--- a/libqtile/backend/wayland/qw/animation.h
++++ b/libqtile/backend/wayland/qw/animation.h
+@@ -7,6 +7,39 @@ struct qw_xdg_view;
+ struct qw_xwayland_view;
+ struct qw_view;
+ 
++typedef enum {
++    QW_EASE_IN_SINE,
++    QW_EASE_OUT_SINE,
++    QW_EASE_IN_OUT_SINE,
++    QW_EASE_IN_CUBIC,
++    QW_EASE_OUT_CUBIC,
++    QW_EASE_IN_OUT_CUBIC,
++    QW_EASE_IN_QUINT,
++    QW_EASE_OUT_QUINT,
++    QW_EASE_IN_OUT_QUINT,
++    QW_EASE_IN_CIRC,
++    QW_EASE_OUT_CIRC,
++    QW_EASE_IN_OUT_CIRC,
++    QW_EASE_IN_ELASTIC,
++    QW_EASE_OUT_ELASTIC,
++    QW_EASE_IN_OUT_ELASTIC,
++    QW_EASE_IN_QUAD,
++    QW_EASE_OUT_QUAD,
++    QW_EASE_IN_OUT_QUAD,
++    QW_EASE_IN_QUART,
++    QW_EASE_OUT_QUART,
++    QW_EASE_IN_OUT_QUART,
++    QW_EASE_IN_EXPO,
++    QW_EASE_OUT_EXPO,
++    QW_EASE_IN_OUT_EXPO,
++    QW_EASE_IN_BACK,
++    QW_EASE_OUT_BACK,
++    QW_EASE_IN_OUT_BACK,
++    QW_EASE_IN_BOUNCE,
++    QW_EASE_OUT_BOUNCE,
++    QW_EASE_IN_OUT_BOUNCE,
++} qw_easing_t;
++
+ typedef struct {
+     int x, y;
+ } Vec2;
+@@ -32,6 +65,8 @@ typedef struct {
+     double eased_t;
+ } t_state;
+ 
++typedef double (*qw_easing_func_t)(double t);
++
+ long qw_anim_get_time_ms();
+ void qw_anim_step(struct qw_view *base);
+ void qw_anim_fill(qw_anim *anim, struct qw_view *base, int x, int y, int w, int h, int duration,

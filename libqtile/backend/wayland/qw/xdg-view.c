@@ -224,7 +224,12 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
 
     bool needs_repos = place_changed || geom_changed;
 
-    qw_anim_fill(&xdg_view->base.anim, &xdg_view->base, x, y, width, height, duration, needs_repos);
+    // qw_anim_fill(&xdg_view->base.anim, &xdg_view->base, x, y, width, height, duration,
+    // needs_repos);
+    qw_anim_begin(&xdg_view->base.anim, 1000, QW_EASE_OUT_CUBIC);
+    qw_anim_set_position(&xdg_view->base.anim, &xdg_view->base, x, y);
+    // qw_anim_set_size(&xdg_view->base.anim, &xdg_view->base, w, h, true);
+    qw_anim_set_opacity(&xdg_view->base.anim, 0.0f, 1.0f);
 
     // Update stored geometry and base view rectangle
     xdg_view->geom = geom;
