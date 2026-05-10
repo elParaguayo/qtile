@@ -253,6 +253,34 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
     wlr_scene_node_raise_to_top(tree_node);
 }
 
+void qw_view_set_borders_visible(struct qw_view *view, bool visible) {
+    for (int i = 0; i < view->border_count; i++) {
+
+        typeof(*view->borders) *layer = &view->borders[i];
+
+        if (layer->type == QW_BORDER_RECT) {
+
+            for (int j = 0; j < 4; j++) {
+
+                if (!layer->rects[j])
+                    continue;
+
+                wlr_scene_node_set_enabled(&layer->rects[j]->node, visible);
+            }
+
+        } else if (layer->type == QW_BORDER_BUFFER) {
+
+            for (int j = 0; j < 4; j++) {
+
+                if (!layer->scene_bufs[j])
+                    continue;
+
+                wlr_scene_node_set_enabled(&layer->scene_bufs[j]->node, visible);
+            }
+        }
+    }
+}
+
 // Foreign toplevel manager requests
 static void qw_handle_ftl_request_activate(struct wl_listener *listener, void *data) {
     UNUSED(data);
@@ -438,6 +466,7 @@ struct qw_output *qw_view_get_primary_output(struct qw_view *view) {
 void qw_view_grab_click(struct qw_view *view) { view->grabbed_click = true; }
 
 void qw_view_ungrab_click(struct qw_view *view) { view->grabbed_click = false; }
+
 static void qw_set_node_opacity(struct wlr_scene_node *node, float opacity) {
     if (node->type == WLR_SCENE_NODE_BUFFER) {
         struct wlr_scene_buffer *buf = wlr_scene_buffer_from_node(node);
@@ -446,7 +475,10 @@ static void qw_set_node_opacity(struct wlr_scene_node *node, float opacity) {
         struct wlr_scene_rect *rect = wlr_scene_rect_from_node(node);
         // RGBA
         // A indicates opacity
-        float new_color[4] = {rect->color[0], rect->color[1], rect->color[2], opacity};
+        float prev_opacity = rect->color[3];
+        float new_mult = opacity / prev_opacity;
+        float new_color[4] = {rect->color[0] * new_mult, rect->color[1] * new_mult,
+                              rect->color[2] * new_mult, opacity};
         wlr_scene_rect_set_color(rect, new_color);
     } else if (node->type == WLR_SCENE_NODE_TREE) {
         struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
@@ -454,6 +486,7 @@ static void qw_set_node_opacity(struct wlr_scene_node *node, float opacity) {
         wl_list_for_each(child, &tree->children, link) { qw_set_node_opacity(child, opacity); }
     }
 }
+
 void qw_view_set_opacity(struct qw_view *view, float opacity) {
     if (view->content_tree) {
         struct wlr_scene_node *node_ptr = &view->content_tree->node;

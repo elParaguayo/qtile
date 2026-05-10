@@ -70,6 +70,9 @@ typedef struct {
     int target_width;
     int target_height;
 
+    float size_origin_x;
+    float size_origin_y;
+
     float start_opacity;
     float target_opacity;
 
@@ -91,10 +94,11 @@ void qw_anim_step(struct qw_view *base);
 void qw_anim_fill(qw_anim *anim, struct qw_view *base, int x, int y, int w, int h, int duration,
                   bool repos);
 
-void qw_anim_begin(qw_anim *anim, int duration, qw_easing_t easing);
+void qw_anim_begin(qw_anim *anim, int x, int y, int w, int h, int duration, qw_easing_t easing,
+                   bool needs_repos);
 void qw_anim_set_position(qw_anim *anim, struct qw_view *view, int x, int y);
-void qw_anim_set_size(qw_anim *anim, struct qw_view *view, int start_w, int start_h, int target_w,
-                      int target_h, bool repos);
+void qw_anim_set_size(qw_anim *anim, int start_w, int start_h, int end_w, int end_h, float origin_x,
+                      float origin_y);
 void qw_anim_set_opacity(qw_anim *anim, float start, float end);
 
 #endif

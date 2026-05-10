@@ -153,6 +153,7 @@ void qw_view_cleanup_borders(struct qw_view *xdg_view);
 
 // Create and paint borders with specified colors
 void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders, int border_count);
+void qw_view_set_borders_visible(struct qw_view *view, bool visible);
 
 // Create/destroy a foreign toplevel manager handle and listeners
 void qw_view_ftl_manager_handle_create(struct qw_view *view);

@@ -240,8 +240,10 @@ static void qw_anim_update_position(Vec2 start, Vec2 end, double elapsed_ms, dou
     current->y = qw_anim_lerp(start.y, end.y, eased_t);
 }
 
-static void qw_anim_apply_opacity(struct qw_view *base, float opacity) {
-    wlr_scene_node_set_opacity(&base->content_tree->node, opacity);
+static void qw_anim_apply_opacity(struct qw_view *view, float opacity) {
+    float view_opacity = view->opacity;
+    qw_view_set_opacity(view, opacity * view_opacity);
+    view->opacity = view_opacity;
 }
 
 long qw_anim_get_time_ms() {
@@ -302,42 +304,90 @@ void qw_anim_fill(qw_anim *anim, struct qw_view *base, int x, int y, int w, int 
 }
 
 void qw_anim_step(struct qw_view *base) {
-    if (!base->anim.active || !base->content_tree)
+    if (!base->anim.active || !base->content_tree || !base->anim.needs_repos)
         return;
+
+    qw_view_set_borders_visible(base, false);
 
     t_state c_state = qw_anim_get_state(&base->anim);
 
     /*
-     * POSITION
+     * FINAL TRANSFORM STATE
+     */
+    int final_x = base->x;
+    int final_y = base->y;
+
+    int final_w = base->width;
+    int final_h = base->height;
+
+    /*
+     * POSITION ANIMATION
      */
     if (base->anim.flags & QW_ANIM_POSITION) {
-        Vec2 curr;
 
-        qw_anim_update_position(base->anim.start_pos, base->anim.target_pos, c_state.elapsed,
-                                base->anim.duration, &curr);
+        final_x =
+            (int)qw_anim_lerp(base->anim.start_pos.x, base->anim.target_pos.x, c_state.eased_t);
 
-        wlr_scene_node_set_position(&base->content_tree->node, curr.x, curr.y);
+        final_y =
+            (int)qw_anim_lerp(base->anim.start_pos.y, base->anim.target_pos.y, c_state.eased_t);
+    } else {
+        /*
+         * If no position animation is active,
+         * use target position as the stable rect.
+         *
+         * This is important for centered scaling.
+         */
+        final_x = base->anim.target_pos.x;
+        final_y = base->anim.target_pos.y;
     }
 
     /*
-     * SIZE
+     * SIZE ANIMATION
      */
     if (base->anim.flags & QW_ANIM_SIZE) {
-        int cur_w =
+
+        final_w =
             (int)qw_anim_lerp(base->anim.start_width, base->anim.target_width, c_state.eased_t);
 
-        int cur_h =
+        final_h =
             (int)qw_anim_lerp(base->anim.start_height, base->anim.target_height, c_state.eased_t);
 
-        qw_anim_apply_view_scale(base, cur_w, cur_h);
+        /*
+         * ORIGIN COMPENSATION
+         *
+         * Keep scaling centered around the chosen origin.
+         *
+         * IMPORTANT:
+         * Compensation must be relative to the TARGET size,
+         * not the start size.
+         */
+        double dx = (base->anim.target_width - final_w) * base->anim.size_origin_x;
+
+        double dy = (base->anim.target_height - final_h) * base->anim.size_origin_y;
+
+        final_x += (int)dx;
+        final_y += (int)dy;
+
+        qw_anim_apply_view_scale(base, final_w, final_h);
     }
 
     /*
-     * OPACITY
+     * APPLY FINAL POSITION
+     */
+    wlr_scene_node_set_position(&base->content_tree->node, final_x, final_y);
+
+    /*
+     * OPACITY ANIMATION
      */
     if (base->anim.flags & QW_ANIM_OPACITY) {
+
         float opacity = (float)qw_anim_lerp(base->anim.start_opacity, base->anim.target_opacity,
                                             c_state.eased_t);
+
+        if (opacity < 0.0f)
+            opacity = 0.0f;
+        else if (opacity > 1.0f)
+            opacity = 1.0f;
 
         qw_anim_apply_opacity(base, opacity);
     }
@@ -347,14 +397,40 @@ void qw_anim_step(struct qw_view *base) {
      */
     if (c_state.elapsed >= base->anim.duration) {
 
+        /*
+         * Final real position
+         *
+         * IMPORTANT:
+         * No resize-origin compensation here.
+         * Compensation is only for temporary scaling.
+         */
+        int end_x = base->x;
+        int end_y = base->y;
+
         if (base->anim.flags & QW_ANIM_POSITION) {
-            wlr_scene_node_set_position(&base->content_tree->node, base->anim.target_pos.x,
-                                        base->anim.target_pos.y);
+            end_x = base->anim.target_pos.x;
+            end_y = base->anim.target_pos.y;
+        } else {
+            end_x = base->anim.target_pos.x;
+            end_y = base->anim.target_pos.y;
         }
 
+        wlr_scene_node_set_position(&base->content_tree->node, end_x, end_y);
+        qw_view_set_borders_visible(base, true);
+        /*
+         * FINAL SIZE
+         */
         if (base->anim.flags & QW_ANIM_SIZE) {
-            qw_anim_apply_view_scale(base, 0, 0);
 
+            /*
+             * Remove temporary compositor scaling
+             */
+            // qw_anim_apply_view_scale(base, 0, 0);
+            qw_anim_apply_view_scale(base, base->anim.target_width, base->anim.target_height);
+
+            /*
+             * Apply real window size
+             */
             if (base->on_anim_complete)
                 base->on_anim_complete(base);
 
@@ -362,7 +438,11 @@ void qw_anim_step(struct qw_view *base) {
                                                       base->anim.target_height);
         }
 
+        /*
+         * FINAL OPACITY
+         */
         if (base->anim.flags & QW_ANIM_OPACITY) {
+
             qw_anim_apply_opacity(base, base->anim.target_opacity);
         }
 
@@ -370,8 +450,15 @@ void qw_anim_step(struct qw_view *base) {
     }
 }
 
-void qw_anim_begin(qw_anim *anim, int duration, qw_easing_t easing) {
+void qw_anim_begin(qw_anim *anim, int x, int y, int w, int h, int duration, qw_easing_t easing,
+                   bool needs_repos) {
     anim->active = true;
+
+    anim->target_pos = (Vec2){.x = x, .y = y};
+
+    anim->target_width = w;
+    anim->target_height = h;
+
     anim->needs_repos = false;
 
     anim->flags = QW_ANIM_NONE;
@@ -380,6 +467,8 @@ void qw_anim_begin(qw_anim *anim, int duration, qw_easing_t easing) {
     anim->start_time = qw_anim_get_time_ms();
 
     anim->easing = easing;
+
+    anim->needs_repos = needs_repos;
 }
 
 void qw_anim_set_position(qw_anim *anim, struct qw_view *view, int x, int y) {
@@ -396,17 +485,18 @@ void qw_anim_set_position(qw_anim *anim, struct qw_view *view, int x, int y) {
     };
 }
 
-void qw_anim_set_size(qw_anim *anim, struct qw_view *view, int start_w, int start_h, int target_w,
-                      int target_h, bool repos) {
+void qw_anim_set_size(qw_anim *anim, int start_w, int start_h, int end_w, int end_h, float origin_x,
+                      float origin_y) {
     anim->flags |= QW_ANIM_SIZE;
-
-    anim->needs_repos = repos;
 
     anim->start_width = start_w;
     anim->start_height = start_h;
 
-    anim->target_width = target_w;
-    anim->target_height = target_h;
+    anim->target_width = end_w;
+    anim->target_height = end_h;
+
+    anim->size_origin_x = origin_x;
+    anim->size_origin_y = origin_y;
 }
 
 void qw_anim_set_opacity(qw_anim *anim, float start, float end) {
