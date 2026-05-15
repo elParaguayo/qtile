@@ -503,14 +503,17 @@ struct qw_view *qw_server_view_at(struct qw_server *server, double lx, double ly
 
         // Walk up the tree to find the associated view
         struct wlr_scene_tree *tree = node->parent;
-        while (tree && !tree->node.data) {
-            tree = tree->node.parent;
-        }
-        if (tree != NULL) {
-            return tree->node.data;
+        while (tree) {
+            // Scene rects don't store the view in their data field
+            if (tree->node.data == NULL || tree->node.type == WLR_SCENE_NODE_RECT) {
+                tree = tree->node.parent;
+                continue;
+            }
+            if (tree->node.data != NULL) {
+                return tree->node.data;
+            }
         }
     }
-
     return NULL;
 }
 
