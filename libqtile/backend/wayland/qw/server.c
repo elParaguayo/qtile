@@ -1001,7 +1001,7 @@ static void qw_server_traverse_scene_node(struct wlr_scene_node *node,
         .y = node->y,
     };
 
-    if (node->data != NULL && node->type != WLR_SCENE_NODE_RECT) {
+    if (node->data != NULL) {
         // Node is associated with a window
         struct qw_view *view = (struct qw_view *)node->data;
         info.view_wid = view->wid;
