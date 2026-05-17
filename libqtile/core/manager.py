@@ -1964,3 +1964,12 @@ class Qtile(CommandObject):
     def stop_repl_server(self) -> None:
         """Stop the REPL server."""
         create_task(repl_server.stop())
+
+    @property
+    def widget_has_keyboard(self) -> bool:
+        for screen in self.screens:
+            for gap in screen.gaps:
+                if isinstance(gap, bar.Bar):
+                    if gap._has_keyboard is not None:
+                        return True
+        return False
