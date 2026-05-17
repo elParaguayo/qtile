@@ -223,22 +223,14 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
 
         if (src->type == QW_BORDER_RECT) {
             for (int j = 0; j < 4; j++) {
-                // Scene rect needs rgba colours to be pre-multiplied
-                float opacity = src->rect.color[j][3] * view->opacity;
-                float color[4] = {src->rect.color[j][0] * opacity, src->rect.color[j][1] * opacity,
-                                  src->rect.color[j][2] * opacity, opacity};
-
                 struct wlr_scene_rect *rect = wlr_scene_rect_create(
-                    view->content_tree, sides[j].width, sides[j].height, color);
+                    view->content_tree, sides[j].width, sides[j].height, src->rect.color[j]);
                 if (!rect) {
                     wlr_log(WLR_ERROR, "Failed to create scene_rect for border");
                     continue;
                 }
                 wlr_scene_node_set_position(&rect->node, sides[j].x, sides[j].y);
                 view->borders[i].rects[j] = rect;
-                memcpy(view->borders[i].color[j], src->rect.color,
-                       sizeof(view->borders[i].color[j]));
-                rect->node.data = view->borders[i].color[j];
             }
 
         } else if (src->type == QW_BORDER_BUFFER) {
@@ -446,21 +438,15 @@ struct qw_output *qw_view_get_primary_output(struct qw_view *view) {
 void qw_view_grab_click(struct qw_view *view) { view->grabbed_click = true; }
 
 void qw_view_ungrab_click(struct qw_view *view) { view->grabbed_click = false; }
-
 static void qw_set_node_opacity(struct wlr_scene_node *node, float opacity) {
     if (node->type == WLR_SCENE_NODE_BUFFER) {
         struct wlr_scene_buffer *buf = wlr_scene_buffer_from_node(node);
         wlr_scene_buffer_set_opacity(buf, opacity);
     } else if (node->type == WLR_SCENE_NODE_RECT) {
         struct wlr_scene_rect *rect = wlr_scene_rect_from_node(node);
-
-        // Retrieve desired border colour
-        float *color = node->data;
-
-        // Pre-multiply RGBA values with new opacity
-        float new_opacity = color[3] * opacity;
-        float new_color[4] = {color[0] * new_opacity, color[1] * new_opacity,
-                              color[2] * new_opacity, new_opacity};
+        // RGBA
+        // A indicates opacity
+        float new_color[4] = {rect->color[0], rect->color[1], rect->color[2], opacity};
         wlr_scene_rect_set_color(rect, new_color);
     } else if (node->type == WLR_SCENE_NODE_TREE) {
         struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
