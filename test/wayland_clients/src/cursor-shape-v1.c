@@ -12,10 +12,24 @@
 #include "cursor-shape-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
+#include <stdarg.h>
+
+static FILE *log_file = NULL;
+
+static void log_msg(const char *fmt, ...) {
+    if (!log_file) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(log_file, fmt, args);
+    fprintf(log_file, "\n");
+    fflush(log_file);
+    va_end(args);
+}
+
 /* ---------------- globals ---------------- */
-static bool configured = false;
-static uint32_t initial_configure_serial = 0;
-static bool running = true;
 
 static struct wl_display *display;
 static struct wl_registry *registry;
@@ -25,13 +39,21 @@ static struct xdg_wm_base *xdg_wm_base;
 static struct wl_shm *shm;
 
 static struct wl_surface *surface;
-static struct xdg_toplevel *xdg_toplevel;
+static struct xdg_surface *xdg_surface;
+static struct xdg_toplevel *toplevel;
 
+static struct wl_pointer *pointer;
 static struct wp_cursor_shape_manager_v1 *cursor_manager;
 static struct wp_cursor_shape_device_v1 *cursor_device;
 
-static uint32_t cursor_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
-static uint32_t last_serial = 0;
+/* ---------------- state ---------------- */
+
+static bool configured = false;
+static uint32_t configure_serial = 0;
+
+static uint32_t enter_serial = 0;
+
+static uint32_t requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
 
 /* ---------------- shm ---------------- */
 
@@ -40,27 +62,22 @@ static int create_shm_file(size_t size) {
     int fd = mkstemp(name);
     unlink(name);
 
-    if (fd < 0)
-        return -1;
-
-    if (ftruncate(fd, size) == -1) {
-        perror("ftruncate failed");
-        exit(EXIT_FAILURE);
-    }
-
+    ftruncate(fd, size);
     return fd;
 }
 
-static struct wl_buffer *create_buffer(struct wl_shm *shm, int width, int height, void **data_out) {
-    int stride = width * 4;
-    int size = stride * height;
+static struct wl_buffer *create_buffer(int w, int h, void **data_out) {
+    int stride = w * 4;
+    int size = stride * h;
 
     int fd = create_shm_file(size);
+
     void *data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
+
     struct wl_buffer *buf =
-        wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
+        wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_XRGB8888);
 
     wl_shm_pool_destroy(pool);
     close(fd);
@@ -69,245 +86,230 @@ static struct wl_buffer *create_buffer(struct wl_shm *shm, int width, int height
     return buf;
 }
 
-/* ---------------- xdg-shell ---------------- */
-
-static void xdg_wm_base_ping(void *data, struct xdg_wm_base *wm_base, uint32_t serial) {
-    xdg_wm_base_pong(wm_base, serial);
-}
-
-static const struct xdg_wm_base_listener xdg_wm_base_listener = {.ping = xdg_wm_base_ping};
-
-static void xdg_surface_handle_configure(void *data, struct xdg_surface *xdg_surface,
-                                         uint32_t serial) {
-    if (configured) {
-        xdg_surface_ack_configure(xdg_surface, serial);
-        wl_surface_commit(surface);
-    } else {
-        initial_configure_serial = serial;
-        configured = true;
-    }
-}
-
-static const struct xdg_surface_listener xdg_surface_listener = {.configure =
-                                                                     xdg_surface_handle_configure};
-
-static void xdg_toplevel_handle_configure(void *data, struct xdg_toplevel *toplevel, int32_t width,
-                                          int32_t height, struct wl_array *states) {
-    // This event is sent before xdg_surface.configure. It specifies the
-    // compositor's desired size and advertises active states for the toplevel.
-    // A resizable client would store these, and resize itself when receiving
-    // the xdg_surface.configure event.
-}
-
-static void xdg_toplevel_handle_close(void *data, struct xdg_toplevel *xdg_toplevel) {
-    // Stop running if the user requests to close the toplevel
-    running = false;
-}
-
-static const struct xdg_toplevel_listener xdg_toplevel_listener = {
-    .configure = xdg_toplevel_handle_configure,
-    .close = xdg_toplevel_handle_close,
-};
-
 /* ---------------- cursor ---------------- */
 
-static uint32_t parse_cursor_shape(const char *name) {
-    if (strcmp(name, "default") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
-    if (strcmp(name, "crosshair") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
-    if (strcmp(name, "pointer") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER;
-    if (strcmp(name, "grab") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRAB;
-    if (strcmp(name, "text") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT;
-    if (strcmp(name, "wait") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_WAIT;
-    if (strcmp(name, "help") == 0)
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_HELP;
-
-    fprintf(stderr, "Unknown cursor shape: %s\n", name);
-    fprintf(stderr, "Available shapes: default, crosshair, pointer, hand, text, wait, help\n");
-    exit(EXIT_FAILURE);
-}
-
-static void set_cursor(uint32_t serial) {
+static void set_shape(uint32_t serial, uint32_t shape) {
+    log_msg("[client] set_shape cursor_device=%p", cursor_device);
     if (!cursor_device)
         return;
 
-    wp_cursor_shape_device_v1_set_shape(cursor_device, serial, cursor_shape);
+    wp_cursor_shape_device_v1_set_shape(cursor_device, serial, shape);
 }
 
 /* ---------------- pointer ---------------- */
 
-static void pointer_enter(void *data, struct wl_pointer *pointer, uint32_t serial,
-                          struct wl_surface *surface, wl_fixed_t x, wl_fixed_t y) {
-    (void)data;
-    (void)pointer;
-    (void)surface;
-    (void)x;
-    (void)y;
+static void pointer_enter(void *data, struct wl_pointer *p, uint32_t serial,
+                          struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y) {
+    log_msg("[client] POINTER ENTER serial=%u surface=%p x=%f y=%f", serial, surf,
+            wl_fixed_to_double(x), wl_fixed_to_double(y));
 
-    last_serial = serial;
-    set_cursor(serial);
+    enter_serial = serial;
+
+    if (!cursor_device) {
+        log_msg("[client] WARNING: cursor_device is NULL at ENTER");
+    }
+
+    set_shape(serial, requested_shape);
 }
 
-static void pointer_motion(void *data, struct wl_pointer *pointer, uint32_t time, wl_fixed_t x,
+static void pointer_leave(void *data, struct wl_pointer *p, uint32_t serial,
+                          struct wl_surface *surf) {
+    log_msg("[client] POINTER LEAVE serial=%u surface=%p", serial, surf);
+}
+
+static void pointer_motion(void *data, struct wl_pointer *p, uint32_t time, wl_fixed_t x,
                            wl_fixed_t y) {
     (void)data;
-    (void)pointer;
+    (void)p;
     (void)time;
     (void)x;
     (void)y;
-
-    last_serial = 0;
-    if (last_serial == 0) {
-        last_serial = 1;
-    }
-    set_cursor(last_serial);
 }
 
-static void pointer_leave(void *data, struct wl_pointer *pointer, uint32_t serial,
-                          struct wl_surface *surface) {
-    (void)data;
-    (void)pointer;
-    (void)serial;
-    (void)surface;
-}
+static const struct wl_pointer_listener pointer_listener = {
+    .enter = pointer_enter,
+    .leave = pointer_leave,
+    .motion = pointer_motion,
+};
 
-static void pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
-                                  uint32_t time, uint32_t button, uint32_t state) {}
+/* ---------------- seat ---------------- */
 
-static void pointer_handle_axis(void *data, struct wl_pointer *pointer, uint32_t time_ms,
-                                uint32_t axis, wl_fixed_t value) {}
+static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps) {
+    log_msg("[client] SEAT CAPABILITIES: pointer=%d keyboard=%d",
+            !!(caps & WL_SEAT_CAPABILITY_POINTER), !!(caps & WL_SEAT_CAPABILITY_KEYBOARD));
 
-static const struct wl_pointer_listener pointer_listener = {.enter = pointer_enter,
-                                                            .leave = pointer_leave,
-                                                            .motion = pointer_motion,
-                                                            .button = pointer_handle_button,
-                                                            .axis = pointer_handle_axis};
+    if (caps & WL_SEAT_CAPABILITY_POINTER) {
+        pointer = wl_seat_get_pointer(seat);
 
-static void seat_handle_capabilities(void *data, struct wl_seat *seat, uint32_t capabilities) {
-    // If the wl_seat has the pointer capability, start listening to pointer
-    // events
-    if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
-        struct wl_pointer *pointer = wl_seat_get_pointer(seat);
-        wl_pointer_add_listener(pointer, &pointer_listener, seat);
+        log_msg("[client] wl_pointer created: %p", pointer);
+
+        wl_pointer_add_listener(pointer, &pointer_listener, NULL);
 
         cursor_device = wp_cursor_shape_manager_v1_get_pointer(cursor_manager, pointer);
+
+        log_msg("[client] cursor_device created: %p", cursor_device);
     }
 }
 
 static const struct wl_seat_listener seat_listener = {
-    .capabilities = seat_handle_capabilities,
+    .capabilities = seat_capabilities,
+};
+
+/* ---------------- xdg-shell ---------------- */
+
+static void wm_ping(void *data, struct xdg_wm_base *wm, uint32_t serial) {
+    xdg_wm_base_pong(wm, serial);
+}
+
+static const struct xdg_wm_base_listener wm_listener = {
+    .ping = wm_ping,
+};
+
+static void xdg_surface_configure(void *data, struct xdg_surface *surf, uint32_t serial) {
+    xdg_surface_ack_configure(surf, serial);
+    wl_surface_commit(surface);
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+    .configure = xdg_surface_configure,
+};
+
+static void toplevel_close(void *data, struct xdg_toplevel *t) { exit(0); }
+
+static void toplevel_configure(void *data, struct xdg_toplevel *t, int32_t w, int32_t h,
+                               struct wl_array *states) {
+    (void)data;
+    (void)t;
+    (void)w;
+    (void)h;
+    (void)states;
+}
+
+static const struct xdg_toplevel_listener toplevel_listener = {
+    .configure = toplevel_configure,
+    .close = toplevel_close,
 };
 
 /* ---------------- registry ---------------- */
 
-static void handle_global(void *data, struct wl_registry *registry, uint32_t name,
-                          const char *interface, uint32_t version) {
-    (void)data;
-    (void)version;
+static void registry_global(void *data, struct wl_registry *reg, uint32_t name, const char *iface,
+                            uint32_t version) {
+    log_msg("[client] GLOBAL: %s (name=%u version=%u)", iface, name, version);
 
-    if (strcmp(interface, wl_compositor_interface.name) == 0)
-        compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
-
-    if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
-        xdg_wm_base = wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
-        xdg_wm_base_add_listener(xdg_wm_base, &xdg_wm_base_listener, NULL);
+    if (strcmp(iface, wl_compositor_interface.name) == 0) {
+        compositor = wl_registry_bind(reg, name, &wl_compositor_interface, 4);
     }
 
-    if (strcmp(interface, wl_seat_interface.name) == 0) {
-        struct wl_seat *seat = wl_registry_bind(registry, name, &wl_seat_interface, 1);
+    if (strcmp(iface, xdg_wm_base_interface.name) == 0) {
+        xdg_wm_base = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
+
+        xdg_wm_base_add_listener(xdg_wm_base, &wm_listener, NULL);
+    }
+
+    if (strcmp(iface, wl_shm_interface.name) == 0) {
+        shm = wl_registry_bind(reg, name, &wl_shm_interface, 1);
+    }
+
+    if (strcmp(iface, wl_seat_interface.name) == 0) {
+        log_msg("[client] binding wl_seat");
+
+        struct wl_seat *seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
+
         wl_seat_add_listener(seat, &seat_listener, NULL);
     }
 
-    if (strcmp(interface, wl_shm_interface.name) == 0)
-        shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+    if (strcmp(iface, wp_cursor_shape_manager_v1_interface.name) == 0) {
+        log_msg("[client] binding cursor_shape_manager_v1");
 
-    if (strcmp(interface, wp_cursor_shape_manager_v1_interface.name) == 0)
-        cursor_manager = wl_registry_bind(registry, name, &wp_cursor_shape_manager_v1_interface, 1);
+        cursor_manager = wl_registry_bind(reg, name, &wp_cursor_shape_manager_v1_interface, 1);
+    }
 }
 
-static void handle_global_remove(void *data, struct wl_registry *registry, uint32_t name) {}
-
 static const struct wl_registry_listener registry_listener = {
-    .global = handle_global, .global_remove = handle_global_remove};
+    .global = registry_global,
+};
 
 /* ---------------- main ---------------- */
 
 int main(int argc, char *argv[]) {
-    // Parse command line arguments
     int opt;
+
     while ((opt = getopt(argc, argv, "c:h")) != -1) {
         switch (opt) {
         case 'c':
-            cursor_shape = parse_cursor_shape(optarg);
+            if (strcmp(optarg, "text") == 0)
+                requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT;
+            else if (strcmp(optarg, "crosshair") == 0)
+                requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
+            else if (strcmp(optarg, "wait") == 0)
+                requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_WAIT;
+            else if (strcmp(optarg, "help") == 0)
+                requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_HELP;
+            else if (strcmp(optarg, "pointer") == 0)
+                requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER;
             break;
-        case 'h':
-            printf("Usage: %s [-c cursor_shape]\n", argv[0]);
-            printf(
-                "  -c: Set cursor shape (default, crosshair, pointer, grab, text, wait, help)\n");
-            return 0;
-        default:
-            fprintf(stderr, "Usage: %s [-c cursor_shape]\n", argv[0]);
-            return 1;
         }
     }
 
-    display = wl_display_connect(NULL);
-    if (!display) {
-        fprintf(stderr, "failed to connect wayland\n");
+    log_file = fopen("/tmp/wl_cursor_client.log", "w");
+    if (!log_file) {
+        perror("fopen log file");
         return 1;
     }
+    setvbuf(log_file, NULL, _IOLBF, 0); // line buffered
+
+    display = wl_display_connect(NULL);
 
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
-    if (wl_display_roundtrip(display) == -1) {
-        return 1;
-    };
+
+    wl_display_roundtrip(display);
 
     if (!compositor || !xdg_wm_base || !shm || !cursor_manager) {
-        fprintf(stderr, "missing required globals\n");
+        fprintf(stderr, "missing globals\n");
         return 1;
     }
 
-    /* surface */
+    /* ---------------- surface ---------------- */
+
     surface = wl_compositor_create_surface(compositor);
-    struct xdg_surface *xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
-    xdg_toplevel = xdg_surface_get_toplevel(xdg_surface);
+
+    xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
+
+    toplevel = xdg_surface_get_toplevel(xdg_surface);
 
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
-    xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
 
-    // Perform the initial commit and wait for the first configure event
+    xdg_toplevel_add_listener(toplevel, &toplevel_listener, NULL);
+
+    /* FIXED SIZE (keeps your Qtile float rule stable) */
+    xdg_toplevel_set_min_size(toplevel, 300, 300);
+    xdg_toplevel_set_max_size(toplevel, 300, 300);
+
     wl_surface_commit(surface);
-    while (!configured) {
-        if (wl_display_dispatch(display) == -1) {
-            return 1;
-        }
-    }
 
-    /* buffer */
+    /* wait for configure */
+    wl_display_roundtrip(display);
+
+    /* ---------------- buffer (IMPORTANT FIX) ---------------- */
+
     void *pixels;
-    struct wl_buffer *buffer = create_buffer(shm, 300, 300, &pixels);
-    // Fill buffer with grey
+    struct wl_buffer *buffer = create_buffer(300, 300, &pixels);
+
     memset(pixels, 0x80, 300 * 300 * 4);
 
     wl_surface_attach(surface, buffer, 0, 0);
-    xdg_surface_ack_configure(xdg_surface, initial_configure_serial);
     wl_surface_commit(surface);
 
-    printf("running...\n");
+    printf("running cursor-shape test window\n");
 
-    while (wl_display_dispatch(display) != -1 && running) {
+    while (wl_display_dispatch(display) != -1) {
     }
 
-    xdg_toplevel_destroy(xdg_toplevel);
-    xdg_surface_destroy(xdg_surface);
-    wl_surface_destroy(surface);
-    wl_buffer_destroy(buffer);
+    if (log_file) {
+        fclose(log_file);
+        log_file = NULL;
+    }
 
     return 0;
 }

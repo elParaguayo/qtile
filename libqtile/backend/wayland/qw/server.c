@@ -855,6 +855,11 @@ struct qw_server *qw_server_create() {
     wl_signal_add(&server->virtual_pointer->events.new_virtual_pointer,
                   &server->virtual_pointer_new);
 
+    // UGLY HACK
+    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+    wlr_seat_set_capabilities(server->seat, caps);
+    // END OF UGLY HACK
+
     // Session lock setup
     qw_session_lock_init(server);
 

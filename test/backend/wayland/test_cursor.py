@@ -2,26 +2,45 @@ from pathlib import Path
 
 import pytest
 
+from test.helpers import Retry
+
 pytest.importorskip("libqtile.backend.wayland.core")
 
-BIN_PATH = Path(__file__).parent.parent / "test/wayland_clients/bin/cursor-shape-v1"
+CLIENT = Path(__file__) / ".." / ".." / ".." / "wayland_clients" / "bin" / "cursor-shape-v1"
 
 
-@pytest.mark.parametrize("shape", ["text", "crosshair", "wait", "help"])
+@pytest.mark.parametrize("shape", ["crosshair", "text", "wait", "help"])
 def test_cursor_shape_protocol(wmanager, shape):
     """Test that the C client can successfully request shapes via the protocol."""
-    try:
-        wmanager.test_window("cursor-shape-v1")
-    except Exception:
-        pytest.skip("cursor-shape-v1 protocol not available")
 
-    wmanager.c.eval(f"self.core.warp_pointer({150}, {150}, motion=True)")
+    @Retry(ignore_exceptions=(AssertionError,))
+    def wait_for_window():
+        assert len(wmanager.c.windows()) > 0
 
-    cursor_name = wmanager.c.core.get_cursor_shape_v1()
+    def cursor_name():
+        return wmanager.c.core.get_cursor_shape_v1()
+
+    @Retry(ignore_exceptions=(AssertionError,))
+    def wait_for_cursor():
+        assert cursor_name() != "default"
+
+    wmanager.c.spawn(f"{CLIENT.resolve().as_posix()} -c {shape}")
+    print(f"{CLIENT.resolve().as_posix()}")
+
+    wait_for_window()
+    wmanager.c.window.set_position_floating(100, 100)
+    print(wmanager.c.window.info())
+    wmanager.c.eval("self.core.warp_pointer(0, 0, motion=True)")
+    assert cursor_name() == "default"
+
+    wmanager.c.eval("self.core.warp_pointer(110, 110, motion=True)")
+    wait_for_cursor()
+    wmanager.c.spawn(f"grim -c /tmp/cursor-{shape}.png")
+    cursor = cursor_name()
 
     if shape == "wait":
-        assert cursor_name in ["wait", "watch"]
+        assert cursor in ["wait", "watch"]
     elif shape == "help":
-        assert cursor_name in ["help", "whats_this", "question_arrow"]
+        assert cursor in ["help", "whats_this", "question_arrow"]
     else:
-        assert cursor_name == shape
+        assert cursor == shape

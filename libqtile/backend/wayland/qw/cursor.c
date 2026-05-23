@@ -36,11 +36,22 @@ static void update_pointer_focus(struct qw_cursor *cursor, struct wlr_surface *s
         // Reset cursor if we're not over a surface and we're not dragging
         if (cursor->server->seat->drag == NULL) {
             wlr_cursor_set_xcursor(cursor->cursor, cursor->mgr, "default");
+            cursor->current_shape_name = "default";
         }
     } else {
         struct wlr_surface *prev_surface = seat->pointer_state.focused_surface;
         if (surface != prev_surface) {
+            wlr_log(WLR_ERROR, "ENTER NOTIFY %f %f", sx, sy);
+            struct wl_client *c =
+                surface && surface->resource ? wl_resource_get_client(surface->resource) : NULL;
+
+            wlr_log(
+                WLR_ERROR,
+                "ENTER DEBUG surface=%p resource=%p client=%p focused_surface=%p focused_client=%p",
+                surface, surface ? surface->resource : NULL, c, seat->pointer_state.focused_surface,
+                seat->pointer_state.focused_client);
             wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
+            wlr_seat_pointer_notify_motion(seat, 0, sx, sy);
         }
     }
     qw_cursor_dispatch_internal_pointer(cursor, sx, sy);
@@ -692,6 +703,7 @@ void qw_cursor_configure_xcursor(struct qw_cursor *cursor) {
         // Reset the cursor so that we apply it to outputs that just appeared
         wlr_cursor_unset_image(cursor->cursor);
         wlr_cursor_set_xcursor(cursor->cursor, cursor->mgr, "default");
+        cursor->current_shape_name = "default";
         wlr_cursor_warp(cursor->cursor, NULL, cursor->cursor->x, cursor->cursor->y);
     }
 }
@@ -715,10 +727,12 @@ static void qw_handle_request_set_cursor_shape(struct wl_listener *listener, voi
     struct qw_cursor *cursor = wl_container_of(listener, cursor, request_set_cursor_shape);
     struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
 
-    struct wlr_seat_client *focused_client = cursor->server->seat->pointer_state.focused_client;
-    if (focused_client != event->seat_client) {
-        return;
-    }
+    wlr_log(WLR_ERROR, "cursor-shape event: seat_client=%p focused_client=%p\n", event->seat_client,
+            cursor->server->seat->pointer_state.focused_client);
+    // struct wlr_seat_client *focused_client = cursor->server->seat->pointer_state.focused_client;
+    // if (focused_client != event->seat_client) {
+    //     return;
+    // }
 
     const char *name = wlr_cursor_shape_v1_name(event->shape);
     cursor->current_shape_name = name;
