@@ -63,6 +63,8 @@ static uint32_t enter_serial = 0;
 
 static uint32_t requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
 
+static bool pointer_entered = false;
+
 /* ---------------- shm ---------------- */
 
 static int create_shm_file(size_t size) {
@@ -119,6 +121,7 @@ static void pointer_enter(void *data, struct wl_pointer *p, uint32_t serial,
     }
 
     set_shape(serial, requested_shape);
+    pointer_entered = true;
 }
 
 static void pointer_leave(void *data, struct wl_pointer *p, uint32_t serial,
@@ -239,6 +242,10 @@ static const struct wl_callback_listener frame_listener;
 static void wl_surface_frame_handler(void *data, struct wl_callback *callback, uint32_t time) {
     wl_callback_destroy(callback);
 
+    if (pointer_entered) {
+        return;
+    }
+
     // Damage the surface to force the compositor to keep processing us
     wl_surface_damage(surface, 0, 0, 300, 300);
 
@@ -328,10 +335,10 @@ int main(int argc, char *argv[]) {
     wl_surface_attach(surface, buffer, 0, 0);
     wl_surface_commit(surface);
     wl_surface_attach(surface, buffer, 0, 0);
-    struct wl_callback *cb = wl_surface_frame(surface);
-    wl_callback_add_listener(cb, &frame_listener, NULL);
-    wl_surface_commit(surface);
-    wl_display_flush(display);
+    // struct wl_callback *cb = wl_surface_frame(surface);
+    // wl_callback_add_listener(cb, &frame_listener, NULL);
+    // wl_surface_commit(surface);
+    // wl_display_flush(display);
 
     log_msg("running cursor-shape test window\n");
 
