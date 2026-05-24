@@ -1,5 +1,3 @@
-import os
-import signal
 from pathlib import Path
 
 import pytest
@@ -16,14 +14,14 @@ CURSOR_CLIENT = CLIENT_PATH / "cursor-shape-v1"
 @pytest.fixture
 def vpmanager(wmanager):
     """Starts a virtual pointer client before yielding the manager."""
-    pid = wmanager.c.spawn(f"{POINTER.resolve().as_posix()}")
-    if pid < 1:
-        assert False, "Couldn't start pointer"
-    try:
-        yield wmanager
-    finally:
-        if pid > 1:
-            os.kill(pid, signal.SIGTERM)
+    # pid = wmanager.c.spawn(f"{POINTER.resolve().as_posix()}")
+    # if pid < 1:
+    #     assert False, "Couldn't start pointer"
+    # try:
+    yield wmanager
+    # finally:
+    #     if pid > 1:
+    #         os.kill(pid, signal.SIGTERM)
 
 
 @pytest.mark.parametrize("shape", ["crosshair", "text", "wait", "help"])

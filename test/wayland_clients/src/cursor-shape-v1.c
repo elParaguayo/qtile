@@ -330,6 +330,7 @@ int main(int argc, char *argv[]) {
      */
 
     /* ---------------- main loop ---------------- */
+    log_msg("Reached loops");
     while (wl_display_dispatch(display) != -1) {
         /* keep draining events deterministically */
     }
