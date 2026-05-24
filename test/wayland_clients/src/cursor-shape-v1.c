@@ -234,6 +234,21 @@ static void registry_global(void *data, struct wl_registry *reg, uint32_t name, 
     }
 }
 
+static const struct wl_callback_listener frame_listener;
+
+static void wl_surface_frame_handler(void *data, struct wl_callback *callback, uint32_t time) {
+    wl_callback_destroy(callback);
+
+    // Damage the surface to force the compositor to keep processing us
+    wl_surface_damage(surface, 0, 0, 300, 300);
+
+    struct wl_callback *cb = wl_surface_frame(surface);
+    wl_callback_add_listener(cb, &frame_listener, NULL);
+    wl_surface_commit(surface);
+}
+
+static const struct wl_callback_listener frame_listener = {.done = wl_surface_frame_handler};
+
 static const struct wl_registry_listener registry_listener = {
     .global = registry_global,
 };
@@ -312,6 +327,11 @@ int main(int argc, char *argv[]) {
 
     wl_surface_attach(surface, buffer, 0, 0);
     wl_surface_commit(surface);
+    wl_surface_attach(surface, buffer, 0, 0);
+    struct wl_callback *cb = wl_surface_frame(surface);
+    wl_callback_add_listener(cb, &frame_listener, NULL);
+    wl_surface_commit(surface);
+    wl_display_flush(display);
 
     log_msg("running cursor-shape test window\n");
 
@@ -320,7 +340,7 @@ int main(int argc, char *argv[]) {
      * ========================================================= */
 
     wl_display_roundtrip(display);
-    wl_display_dispatch_pending(display);
+    // wl_display_dispatch_pending(display);
 
     /*
      * This forces:
@@ -333,6 +353,7 @@ int main(int argc, char *argv[]) {
     log_msg("Reached loops");
     while (wl_display_dispatch(display) != -1) {
         /* keep draining events deterministically */
+        wl_display_flush(display);
     }
 
     log_msg("=== END TEST ===\n");

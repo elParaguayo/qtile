@@ -49,6 +49,7 @@ def test_cursor_shape_protocol(vpmanager, shape):
 
     vpmanager.c.eval("self.core.warp_pointer(110, 110)")
     vpmanager.c.eval("self.core.warp_pointer(115, 115)")
+    _ = vpmanager.c.core.stacking_info()
     # vpmanager.c.spawn(f"grim -c /tmp/cursor-{shape}.png")
     wait_for_cursor()
     cursor = cursor_name()
