@@ -1,3 +1,5 @@
+import os
+import signal
 from pathlib import Path
 
 import pytest
@@ -6,36 +8,51 @@ from test.helpers import Retry
 
 pytest.importorskip("libqtile.backend.wayland.core")
 
-CLIENT = Path(__file__) / ".." / ".." / ".." / "wayland_clients" / "bin" / "cursor-shape-v1"
+CLIENT_PATH = Path(__file__) / ".." / ".." / ".." / "wayland_clients" / "bin"
+POINTER = CLIENT_PATH / "virtual-pointer"
+CURSOR_CLIENT = CLIENT_PATH / "cursor-shape-v1"
+
+
+@pytest.fixture
+def vpmanager(wmanager):
+    """Starts a virtual pointer client before yielding the manager."""
+    pid = wmanager.c.spawn(f"{POINTER.resolve().as_posix()}")
+    if pid < 1:
+        assert False, "Couldn't start pointer"
+    try:
+        yield wmanager
+    finally:
+        if pid > 1:
+            os.kill(pid, signal.SIGTERM)
 
 
 @pytest.mark.parametrize("shape", ["crosshair", "text", "wait", "help"])
-def test_cursor_shape_protocol(wmanager, shape):
+def test_cursor_shape_protocol(vpmanager, shape):
     """Test that the C client can successfully request shapes via the protocol."""
 
     @Retry(ignore_exceptions=(AssertionError,))
     def wait_for_window():
-        assert len(wmanager.c.windows()) > 0
+        assert len(vpmanager.c.windows()) > 0
 
     def cursor_name():
-        return wmanager.c.core.get_cursor_shape_v1()
+        return vpmanager.c.core.get_cursor_shape_v1()
 
     @Retry(ignore_exceptions=(AssertionError,))
     def wait_for_cursor():
         assert cursor_name() != "default"
 
-    wmanager.c.spawn(f"{CLIENT.resolve().as_posix()} -c {shape}")
-    print(f"{CLIENT.resolve().as_posix()}")
+    vpmanager.c.spawn(f"{CURSOR_CLIENT.resolve().as_posix()} -c {shape}")
 
     wait_for_window()
-    wmanager.c.window.set_position_floating(100, 100)
-    print(wmanager.c.window.info())
-    wmanager.c.eval("self.core.warp_pointer(0, 0, motion=True)")
+    vpmanager.c.window.set_position_floating(100, 100)
+    print(vpmanager.c.window.info())
+    vpmanager.c.eval("self.core.warp_pointer(0, 0, motion=True)")
     assert cursor_name() == "default"
 
-    wmanager.c.eval("self.core.warp_pointer(110, 110, motion=True)")
+    vpmanager.c.eval("self.core.warp_pointer(110, 110)")
+    vpmanager.c.eval("self.core.warp_pointer(115, 115)")
+    # vpmanager.c.spawn(f"grim -c /tmp/cursor-{shape}.png")
     wait_for_cursor()
-    wmanager.c.spawn(f"grim -c /tmp/cursor-{shape}.png")
     cursor = cursor_name()
 
     if shape == "wait":

@@ -1,11 +1,13 @@
 #include <errno.h>
 #include <getopt.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 #include <wayland-client.h>
 
@@ -21,14 +23,20 @@ static void log_msg(const char *fmt, ...) {
         return;
     }
 
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+
+    fprintf(log_file, "[%02d:%02d:%02d] ", tm.tm_hour, tm.tm_min, tm.tm_sec);
+
     va_list args;
     va_start(args, fmt);
     vfprintf(log_file, fmt, args);
-    fprintf(log_file, "\n");
-    fflush(log_file);
     va_end(args);
-}
 
+    fputc('\n', log_file);
+    fflush(log_file);
+}
 /* ---------------- globals ---------------- */
 
 static struct wl_display *display;
@@ -94,6 +102,7 @@ static void set_shape(uint32_t serial, uint32_t shape) {
         return;
 
     wp_cursor_shape_device_v1_set_shape(cursor_device, serial, shape);
+    wl_display_flush(display);
 }
 
 /* ---------------- pointer ---------------- */
@@ -234,6 +243,7 @@ static const struct wl_registry_listener registry_listener = {
 int main(int argc, char *argv[]) {
     int opt;
 
+    /* ---------------- CLI ---------------- */
     while ((opt = getopt(argc, argv, "c:h")) != -1) {
         switch (opt) {
         case 'c':
@@ -251,18 +261,25 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    log_file = fopen("/tmp/wl_cursor_client.log", "w");
+    /* ---------------- logging ---------------- */
+    log_file = fopen("/tmp/wl_cursor_client.log", "a");
     if (!log_file) {
         perror("fopen log file");
         return 1;
     }
-    setvbuf(log_file, NULL, _IOLBF, 0); // line buffered
+    setvbuf(log_file, NULL, _IOLBF, 0);
 
+    log_msg("=== START TEST ===");
+
+    /* ---------------- connect ---------------- */
     display = wl_display_connect(NULL);
+    if (!display)
+        return 1;
 
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
 
+    /* ---- MUST: bind globals ---- */
     wl_display_roundtrip(display);
 
     if (!compositor || !xdg_wm_base || !shm || !cursor_manager) {
@@ -271,28 +288,23 @@ int main(int argc, char *argv[]) {
     }
 
     /* ---------------- surface ---------------- */
-
     surface = wl_compositor_create_surface(compositor);
 
     xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
-
     toplevel = xdg_surface_get_toplevel(xdg_surface);
 
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
-
     xdg_toplevel_add_listener(toplevel, &toplevel_listener, NULL);
 
-    /* FIXED SIZE (keeps your Qtile float rule stable) */
     xdg_toplevel_set_min_size(toplevel, 300, 300);
     xdg_toplevel_set_max_size(toplevel, 300, 300);
 
     wl_surface_commit(surface);
 
-    /* wait for configure */
+    /* ---- MUST: wait for configure ---- */
     wl_display_roundtrip(display);
 
-    /* ---------------- buffer (IMPORTANT FIX) ---------------- */
-
+    /* ---------------- buffer ---------------- */
     void *pixels;
     struct wl_buffer *buffer = create_buffer(300, 300, &pixels);
 
@@ -301,10 +313,28 @@ int main(int argc, char *argv[]) {
     wl_surface_attach(surface, buffer, 0, 0);
     wl_surface_commit(surface);
 
-    printf("running cursor-shape test window\n");
+    log_msg("running cursor-shape test window\n");
 
+    /* =========================================================
+     * CRITICAL FIX: SYNC BARRIER BEFORE ENTERING TEST LOOP
+     * ========================================================= */
+
+    wl_display_roundtrip(display);
+    wl_display_dispatch_pending(display);
+
+    /*
+     * This forces:
+     * - seat focus to settle
+     * - pointer enter to be delivered
+     * - cursor-shape device to be fully active
+     */
+
+    /* ---------------- main loop ---------------- */
     while (wl_display_dispatch(display) != -1) {
+        /* keep draining events deterministically */
     }
+
+    log_msg("=== END TEST ===\n");
 
     if (log_file) {
         fclose(log_file);

@@ -54,6 +54,10 @@ PROTOS = [
         "cursor-shape-v1-protocol.h",
         f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml",
     ],
+    [
+        "wlr-virtual-pointer-unstable-v1-protocol.h",
+        f"{QW_PROTO_IN_PATH}/wlr-virtual-pointer-unstable-v1.xml",
+    ],
 ]
 
 CLIENT_PROTOS = [
@@ -63,6 +67,10 @@ CLIENT_PROTOS = [
         f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml",
     ],
     ["tablet-v2-client-protocol", f"{WAYLAND_PROTOCOLS}/stable/tablet/tablet-v2.xml"],
+    [
+        "virtual-pointer-unstable-v1-client-protocol",
+        f"{QW_PROTO_IN_PATH}/wlr-virtual-pointer-unstable-v1.xml",
+    ],
 ]
 
 QW_PROTO_OUT_PATH = QW_PATH / "proto"
@@ -297,22 +305,33 @@ def build_objects(debug: bool = False, asan: bool = False) -> None:
         )
 
 
-def build_test_client():
+def build_test_clients():
     root = Path(__file__).parent.parent.parent.parent.parent
     proto = QW_PROTO_OUT_PATH
 
     (root / "test/wayland_clients/bin").mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        "cc",
-        str(root / "test/wayland_clients/src/cursor-shape-v1.c"),
-        str(proto / "xdg-shell-client-protocol.c"),
-        str(proto / "cursor-shape-v1-client-protocol.c"),
-        str(proto / "tablet-v2-client-protocol.c"),
-        "-I",
-        str(proto),
-        "-o",
-        str(root / "test/wayland_clients/bin/cursor-shape-v1"),
+    cmds = [
+        [
+            "cc",
+            str(root / "test/wayland_clients/src/cursor-shape-v1.c"),
+            str(proto / "xdg-shell-client-protocol.c"),
+            str(proto / "cursor-shape-v1-client-protocol.c"),
+            str(proto / "tablet-v2-client-protocol.c"),
+            "-I",
+            str(proto),
+            "-o",
+            str(root / "test/wayland_clients/bin/cursor-shape-v1"),
+        ],
+        [
+            "cc",
+            str(root / "test/wayland_clients/src/virtual-pointer.c"),
+            str(proto / "virtual-pointer-unstable-v1-client-protocol.c"),
+            "-I",
+            str(proto),
+            "-o",
+            str(root / "test/wayland_clients/bin/virtual-pointer"),
+        ],
     ]
 
     pkg = (
@@ -327,10 +346,10 @@ def build_test_client():
         .decode()
         .split()
     )
+    for cmd in cmds:
+        cmd += pkg
 
-    cmd += pkg
-
-    subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True)
 
 
 def ffi_compile(verbose: bool = False, debug: bool = False, asan: bool = False) -> None:
@@ -370,7 +389,7 @@ def ffi_compile(verbose: bool = False, debug: bool = False, asan: bool = False) 
     ffi.compile(
         tmpdir=Path(__file__).parent.parent.parent.parent.parent.as_posix(), verbose=verbose
     )
-    build_test_client()
+    build_test_clients()
 
 
 if __name__ == "__main__":

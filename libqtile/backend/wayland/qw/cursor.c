@@ -52,6 +52,7 @@ static void update_pointer_focus(struct qw_cursor *cursor, struct wlr_surface *s
                 seat->pointer_state.focused_client);
             wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
             wlr_seat_pointer_notify_motion(seat, 0, sx, sy);
+            wlr_seat_pointer_notify_frame(seat);
         }
     }
     qw_cursor_dispatch_internal_pointer(cursor, sx, sy);
