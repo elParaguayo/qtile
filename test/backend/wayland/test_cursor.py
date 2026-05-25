@@ -4,8 +4,6 @@ import pytest
 
 from test.helpers import Retry
 
-pytest.importorskip("libqtile.backend.wayland.core")
-
 CLIENT_PATH = Path(__file__) / ".." / ".." / ".." / "wayland_clients" / "bin"
 CURSOR_CLIENT = CLIENT_PATH / "cursor-shape-v1"
 
@@ -26,16 +24,16 @@ def test_cursor_shape_protocol(wmanager, shape):
         assert cursor_name() != "default"
 
     wmanager.c.spawn(f"{CURSOR_CLIENT.resolve().as_posix()} -c {shape} -d")
-
     wait_for_window()
     wmanager.c.window.set_position_floating(150, 150)
+
+    # Cursor is outside window so should be default
     wmanager.c.core.eval("self.warp_pointer(0, 0, motion=True)")
     assert cursor_name() == "default"
 
-    wmanager.c.core.eval("self.warp_pointer(110, 110, motion=True)")
+    # Move cursor inside test client window
+    wmanager.c.core.eval("self.warp_pointer(200, 200, motion=True)")
     wmanager.c.core.eval("self.flush()")
-    wmanager.c.core.eval("self.flush()")
-    # wmanager.c.spawn(f"grim -c /tmp/cursor-{shape}.png")
     wait_for_cursor()
     cursor = cursor_name()
 
