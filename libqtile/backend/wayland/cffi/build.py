@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 from contextlib import chdir
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from cffi import FFI
@@ -28,6 +29,8 @@ if not WAYLAND_SCANNER:
         text=True,
         stdout=subprocess.PIPE,
     ).stdout.strip()
+if WAYLAND_SCANNER is None:
+    sys.exit("wayland-scanner not found. Exiting.")
 WAYLAND_PROTOCOLS = subprocess.run(
     [PKG_CONFIG, "--variable=pkgdatadir", "wayland-protocols"],
     text=True,
@@ -35,53 +38,131 @@ WAYLAND_PROTOCOLS = subprocess.run(
 ).stdout.strip()
 
 QW_PROTO_IN_PATH = (QW_PATH / ".." / "proto").resolve()
-
-PROTOS = [
-    [
-        "wlr-layer-shell-unstable-v1-protocol.h",
-        f"{QW_PROTO_IN_PATH}/wlr-layer-shell-unstable-v1.xml",
-    ],
-    [
-        "wlr-output-power-management-unstable-v1-protocol.h",
-        f"{QW_PROTO_IN_PATH}/wlr-output-power-management-unstable-v1.xml",
-    ],
-    ["xdg-shell-protocol.h", f"{WAYLAND_PROTOCOLS}/stable/xdg-shell/xdg-shell.xml"],
-    [
-        "pointer-constraints-unstable-v1-protocol.h",
-        f"{WAYLAND_PROTOCOLS}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml",
-    ],
-    [
-        "cursor-shape-v1-protocol.h",
-        f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml",
-    ],
-    [
-        "wlr-virtual-pointer-unstable-v1-protocol.h",
-        f"{QW_PROTO_IN_PATH}/wlr-virtual-pointer-unstable-v1.xml",
-    ],
-]
-
-CLIENT_PROTOS = [
-    ["xdg-shell-client-protocol", f"{WAYLAND_PROTOCOLS}/stable/xdg-shell/xdg-shell.xml"],
-    [
-        "cursor-shape-v1-client-protocol",
-        f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml",
-    ],
-    ["tablet-v2-client-protocol", f"{WAYLAND_PROTOCOLS}/stable/tablet/tablet-v2.xml"],
-    [
-        "virtual-pointer-unstable-v1-client-protocol",
-        f"{QW_PROTO_IN_PATH}/wlr-virtual-pointer-unstable-v1.xml",
-    ],
-]
-
 QW_PROTO_OUT_PATH = QW_PATH / "proto"
 QW_PROTO_OUT_PATH.mkdir(exist_ok=True)
 
+TEST_CLIENT_PATH = (
+    Path(__file__) / ".." / ".." / ".." / ".." / ".." / "test" / "wayland_clients"
+).resolve()
+TEST_CLIENT_IN_PATH = TEST_CLIENT_PATH / "src"
+TEST_CLIENT_OUT_PATH = TEST_CLIENT_PATH / "bin"
+TEST_CLIENT_OUT_PATH.mkdir(parents=True, exist_ok=True)
+
+
+@dataclass
+class Protocol:
+    xml_path: str
+    build_server: bool = True
+    build_client: bool = False
+
+    @property
+    def private_code(self) -> str:
+        """Derives the private code protocol name from the XML filename."""
+        return f"{Path(self.xml_path).stem}-protocol.c"
+
+    @property
+    def server_header(self) -> str:
+        """Derives the server header protocol name from the XML filename."""
+        return f"{Path(self.xml_path).stem}-protocol.h"
+
+    @property
+    def client_header(self) -> str:
+        """Derives the client header protocol name from the XML filename."""
+        return f"{Path(self.xml_path).stem}-client-protocol.h"
+
+    def _build(self, protocol_type: str, output: Path) -> None:
+        assert WAYLAND_SCANNER is not None
+        subprocess.run(
+            [WAYLAND_SCANNER, protocol_type, self.xml_path, output.resolve().as_posix()],
+            check=True,
+        )
+
+    def build(self, folder: Path) -> None:
+        if self.build_server:
+            self._build("server-header", folder / self.server_header)
+
+        if self.build_client:
+            self._build("client-header", folder / self.client_header)
+            self._build("private-code", folder / self.private_code)
+
+
+@dataclass
+class TestClient:
+    name: str
+    sources: list[str | Path]
+    # Add any other client-specific flags here (e.g., dependencies, extra_args)
+    includes: list[str | Path] = field(default_factory=list)
+    extra_args: list[str] = field(default_factory=list)
+
+    def _to_string(self, value: str | Path) -> str:
+        if isinstance(value, Path):
+            return value.resolve().as_posix()
+        return value
+
+    def build(self) -> None:
+        pkg = (
+            subprocess.check_output(
+                [
+                    "pkg-config",
+                    "--cflags",
+                    "--libs",
+                    "wayland-client",
+                ]
+            )
+            .decode()
+            .split()
+        )
+
+        cmd = ["cc"]
+
+        for source in self.sources:
+            cmd.append(self._to_string(source))
+
+        for include in self.includes:
+            cmd.extend(["-I", self._to_string(include)])
+
+        cmd.extend(self.extra_args)
+        cmd.extend(pkg)
+        cmd.extend(["-o", (TEST_CLIENT_OUT_PATH / self.name).resolve().as_posix()])
+
+        subprocess.run(cmd, check=True)
+
+
+PROTOS = [
+    Protocol(f"{QW_PROTO_IN_PATH}/wlr-layer-shell-unstable-v1.xml"),
+    Protocol(f"{QW_PROTO_IN_PATH}/wlr-output-power-management-unstable-v1.xml"),
+    Protocol(f"{WAYLAND_PROTOCOLS}/stable/xdg-shell/xdg-shell.xml", build_client=True),
+    Protocol(
+        f"{WAYLAND_PROTOCOLS}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"
+    ),
+    Protocol(f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml"),
+    Protocol(
+        f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml",
+        build_client=True,
+        build_server=False,
+    ),
+    Protocol(
+        f"{WAYLAND_PROTOCOLS}/stable/tablet/tablet-v2.xml", build_client=True, build_server=False
+    ),
+]
+
+
+TEST_CLIENTS = [
+    TestClient(
+        name="cursor-shape-v1",
+        sources=[
+            TEST_CLIENT_IN_PATH / "cursor-shape-v1.c",
+            QW_PROTO_OUT_PATH / "xdg-shell-client-protocol.c",
+            QW_PROTO_OUT_PATH / "cursor-shape-v1-client-protocol.c",
+            QW_PROTO_OUT_PATH / "tablet-v2-client-protocol.c",
+        ],
+        includes=[QW_PROTO_OUT_PATH],
+    )
+]
+
+
 for proto in PROTOS:
-    subprocess.run(
-        [WAYLAND_SCANNER, "server-header", proto[1], QW_PROTO_OUT_PATH / proto[0]],
-        text=True,
-        stdout=subprocess.PIPE,
-    ).stdout.strip()
+    proto.build(QW_PROTO_OUT_PATH)
 
 
 # Helper to check whether wlroots has been compiled with xwayland support
@@ -89,19 +170,6 @@ def wlroots_has_xwayland():
     config = Path(WLROOTS_PATH) / "wlr" / "config.h"
     return "WLR_HAS_XWAYLAND 1" in config.read_text()
 
-
-for proto in CLIENT_PROTOS:
-    subprocess.run(
-        [WAYLAND_SCANNER, "client-header", proto[1], QW_PROTO_OUT_PATH / f"{proto[0]}.h"],
-        text=True,
-        stdout=subprocess.PIPE,
-    ).stdout.strip()
-
-    subprocess.run(
-        [WAYLAND_SCANNER, "private-code", proto[1], QW_PROTO_OUT_PATH / f"{proto[0]}.c"],
-        text=True,
-        stdout=subprocess.PIPE,
-    ).stdout.strip()
 
 CDEF = """
 // logging
@@ -306,50 +374,8 @@ def build_objects(debug: bool = False, asan: bool = False) -> None:
 
 
 def build_test_clients():
-    root = Path(__file__).parent.parent.parent.parent.parent
-    proto = QW_PROTO_OUT_PATH
-
-    (root / "test/wayland_clients/bin").mkdir(parents=True, exist_ok=True)
-
-    cmds = [
-        [
-            "cc",
-            str(root / "test/wayland_clients/src/cursor-shape-v1.c"),
-            str(proto / "xdg-shell-client-protocol.c"),
-            str(proto / "cursor-shape-v1-client-protocol.c"),
-            str(proto / "tablet-v2-client-protocol.c"),
-            "-I",
-            str(proto),
-            "-o",
-            str(root / "test/wayland_clients/bin/cursor-shape-v1"),
-        ],
-        [
-            "cc",
-            str(root / "test/wayland_clients/src/virtual-pointer.c"),
-            str(proto / "virtual-pointer-unstable-v1-client-protocol.c"),
-            "-I",
-            str(proto),
-            "-o",
-            str(root / "test/wayland_clients/bin/virtual-pointer"),
-        ],
-    ]
-
-    pkg = (
-        subprocess.check_output(
-            [
-                "pkg-config",
-                "--cflags",
-                "--libs",
-                "wayland-client",
-            ]
-        )
-        .decode()
-        .split()
-    )
-    for cmd in cmds:
-        cmd += pkg
-
-        subprocess.run(cmd, check=True)
+    for client in TEST_CLIENTS:
+        client.build()
 
 
 def ffi_compile(verbose: bool = False, debug: bool = False, asan: bool = False) -> None:
