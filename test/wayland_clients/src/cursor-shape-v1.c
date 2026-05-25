@@ -16,10 +16,12 @@
 
 #include <stdarg.h>
 
+static bool DEBUG = false;
 static FILE *log_file = NULL;
 
+// Logger - logs to file if -d option set
 static void log_msg(const char *fmt, ...) {
-    if (!log_file) {
+    if (!DEBUG || log_file == NULL) {
         return;
     }
 
@@ -96,18 +98,15 @@ static struct wl_buffer *create_buffer(int w, int h, void **data_out) {
     return buf;
 }
 
-/* ---------------- cursor ---------------- */
-
+// Request a cursor shape
 static void set_shape(uint32_t serial, uint32_t shape) {
     log_msg("[client] set_shape cursor_device=%p", cursor_device);
-    if (!cursor_device)
+    if (cursor_device == NULL)
         return;
 
     wp_cursor_shape_device_v1_set_shape(cursor_device, serial, shape);
     wl_display_flush(display);
 }
-
-/* ---------------- pointer ---------------- */
 
 static void pointer_enter(void *data, struct wl_pointer *p, uint32_t serial,
                           struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y) {
@@ -116,7 +115,7 @@ static void pointer_enter(void *data, struct wl_pointer *p, uint32_t serial,
 
     enter_serial = serial;
 
-    if (!cursor_device) {
+    if (cursor_device == NULL) {
         log_msg("[client] WARNING: cursor_device is NULL at ENTER");
     }
 
@@ -126,7 +125,10 @@ static void pointer_enter(void *data, struct wl_pointer *p, uint32_t serial,
 
 static void pointer_leave(void *data, struct wl_pointer *p, uint32_t serial,
                           struct wl_surface *surf) {
-    log_msg("[client] POINTER LEAVE serial=%u surface=%p", serial, surf);
+    (void)data;
+    (void)p;
+    (void)serial;
+    (void)surf;
 }
 
 static void pointer_motion(void *data, struct wl_pointer *p, uint32_t time, wl_fixed_t x,
@@ -143,8 +145,6 @@ static const struct wl_pointer_listener pointer_listener = {
     .leave = pointer_leave,
     .motion = pointer_motion,
 };
-
-/* ---------------- seat ---------------- */
 
 static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps) {
     log_msg("[client] SEAT CAPABILITIES: pointer=%d keyboard=%d",
@@ -166,8 +166,6 @@ static void seat_capabilities(void *data, struct wl_seat *seat, uint32_t caps) {
 static const struct wl_seat_listener seat_listener = {
     .capabilities = seat_capabilities,
 };
-
-/* ---------------- xdg-shell ---------------- */
 
 static void wm_ping(void *data, struct xdg_wm_base *wm, uint32_t serial) {
     xdg_wm_base_pong(wm, serial);
@@ -237,35 +235,14 @@ static void registry_global(void *data, struct wl_registry *reg, uint32_t name, 
     }
 }
 
-static const struct wl_callback_listener frame_listener;
-
-static void wl_surface_frame_handler(void *data, struct wl_callback *callback, uint32_t time) {
-    wl_callback_destroy(callback);
-
-    if (pointer_entered) {
-        return;
-    }
-
-    // Damage the surface to force the compositor to keep processing us
-    wl_surface_damage(surface, 0, 0, 300, 300);
-
-    struct wl_callback *cb = wl_surface_frame(surface);
-    wl_callback_add_listener(cb, &frame_listener, NULL);
-    wl_surface_commit(surface);
-}
-
-static const struct wl_callback_listener frame_listener = {.done = wl_surface_frame_handler};
-
 static const struct wl_registry_listener registry_listener = {
     .global = registry_global,
 };
 
-/* ---------------- main ---------------- */
-
 int main(int argc, char *argv[]) {
     int opt;
 
-    /* ---------------- CLI ---------------- */
+    // Handle command line options
     while ((opt = getopt(argc, argv, "c:h")) != -1) {
         switch (opt) {
         case 'c':
@@ -280,36 +257,52 @@ int main(int argc, char *argv[]) {
             else if (strcmp(optarg, "pointer") == 0)
                 requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER;
             break;
+
+        case 'h':
+            printf("Usage: %s [-c shape] [-d]\n", argv[0]);
+            printf("Shapes: text, crosshair, wait, help, pointer.\n");
+            printf("-d to enable debugging to /tmp/qtile_test_cursor_client.log.\n");
+            exit(EXIT_SUCCESS);
+
+        case 'd':
+            DEBUG = true;
+            break;
+
+        case '?':
+            exit(EXIT_FAILURE);
         }
     }
 
-    /* ---------------- logging ---------------- */
-    log_file = fopen("/tmp/wl_cursor_client.log", "a");
-    if (!log_file) {
-        perror("fopen log file");
-        return 1;
+    if (DEBUG) {
+        log_file = fopen("/tmp/qtile_test_cursor_client.log", "a");
+        if (!log_file) {
+            perror("Error opening log file");
+            return 1;
+        }
+        setvbuf(log_file, NULL, _IOLBF, 0);
     }
-    setvbuf(log_file, NULL, _IOLBF, 0);
 
     log_msg("=== START TEST ===");
 
-    /* ---------------- connect ---------------- */
+    // Connect to display
     display = wl_display_connect(NULL);
-    if (!display)
+    if (!display) {
+        fprintf(stderr, "Cannot connect to display. Is compositor running?\n");
         return 1;
+    }
 
     registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
 
-    /* ---- MUST: bind globals ---- */
+    // Bind globals
     wl_display_roundtrip(display);
 
-    if (!compositor || !xdg_wm_base || !shm || !cursor_manager) {
-        fprintf(stderr, "missing globals\n");
+    if (compositor == NULL || xdg_wm_base == NULL || shm == NULL || cursor_manager == NULL) {
+        fprintf(stderr, "Missing globals. Cannot continue.\n");
         return 1;
     }
 
-    /* ---------------- surface ---------------- */
+    // Create window
     surface = wl_compositor_create_surface(compositor);
 
     xdg_surface = xdg_wm_base_get_xdg_surface(xdg_wm_base, surface);
@@ -318,15 +311,14 @@ int main(int argc, char *argv[]) {
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
     xdg_toplevel_add_listener(toplevel, &toplevel_listener, NULL);
 
+    // Set fixed size so qtile will float window
     xdg_toplevel_set_min_size(toplevel, 300, 300);
     xdg_toplevel_set_max_size(toplevel, 300, 300);
 
     wl_surface_commit(surface);
-
-    /* ---- MUST: wait for configure ---- */
     wl_display_roundtrip(display);
 
-    /* ---------------- buffer ---------------- */
+    // Create contents of window
     void *pixels;
     struct wl_buffer *buffer = create_buffer(300, 300, &pixels);
 
@@ -335,37 +327,18 @@ int main(int argc, char *argv[]) {
     wl_surface_attach(surface, buffer, 0, 0);
     wl_surface_commit(surface);
     wl_surface_attach(surface, buffer, 0, 0);
-    // struct wl_callback *cb = wl_surface_frame(surface);
-    // wl_callback_add_listener(cb, &frame_listener, NULL);
-    // wl_surface_commit(surface);
-    // wl_display_flush(display);
-
-    log_msg("running cursor-shape test window\n");
-
-    /* =========================================================
-     * CRITICAL FIX: SYNC BARRIER BEFORE ENTERING TEST LOOP
-     * ========================================================= */
-
     wl_display_roundtrip(display);
-    // wl_display_dispatch_pending(display);
 
-    /*
-     * This forces:
-     * - seat focus to settle
-     * - pointer enter to be delivered
-     * - cursor-shape device to be fully active
-     */
+    // Everything should be up and running now
+    log_msg("Running cursor-shape test window. Entering loop.\n");
 
-    /* ---------------- main loop ---------------- */
-    log_msg("Reached loops");
     while (wl_display_dispatch(display) != -1) {
-        /* keep draining events deterministically */
         wl_display_flush(display);
     }
 
     log_msg("=== END TEST ===\n");
 
-    if (log_file) {
+    if (log_file != NULL) {
         fclose(log_file);
         log_file = NULL;
     }

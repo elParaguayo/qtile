@@ -24,7 +24,6 @@ void qw_server_input_device_new(struct qw_server *server, struct wlr_input_devic
         return;
     }
     device->data = input_device;
-    wlr_log(WLR_ERROR, "INPUT DEVICE TYPE: %d", device->type);
 
     input_device->server = server;
     input_device->device = device;

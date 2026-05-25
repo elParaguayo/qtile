@@ -393,8 +393,6 @@ void qw_server_handle_virtual_pointer(struct wl_listener *listener, void *data) 
     struct wlr_virtual_pointer_v1 *pointer = event->new_pointer;
     struct wlr_input_device *device = &pointer->pointer.base;
 
-    wlr_log(WLR_ERROR, "Virtual pointer created!");
-
     qw_server_input_device_new(server, device);
 
     if (event->suggested_output != NULL) {
@@ -859,11 +857,6 @@ struct qw_server *qw_server_create() {
     server->virtual_pointer_new.notify = qw_server_handle_virtual_pointer;
     wl_signal_add(&server->virtual_pointer->events.new_virtual_pointer,
                   &server->virtual_pointer_new);
-
-    // UGLY HACK
-    // uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-    // wlr_seat_set_capabilities(server->seat, caps);
-    // END OF UGLY HACK
 
     // Session lock setup
     qw_session_lock_init(server);

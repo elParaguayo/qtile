@@ -19,7 +19,6 @@ wlr_env = {
     "WLR_RENDERER_ALLOW_SOFTWARE": "1",
     "WLR_RENDERER": "pixman",
     "XDG_RUNTIME_DIR": "/tmp",
-    "WAYLAND_PYTEST": "1",
 }
 
 
