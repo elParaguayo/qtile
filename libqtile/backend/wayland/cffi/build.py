@@ -135,11 +135,9 @@ PROTOS = [
     Protocol(
         f"{WAYLAND_PROTOCOLS}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"
     ),
-    Protocol(f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml"),
     Protocol(
         f"{WAYLAND_PROTOCOLS}/staging/cursor-shape/cursor-shape-v1.xml",
         build_client=True,
-        build_server=False,
     ),
     Protocol(
         f"{WAYLAND_PROTOCOLS}/stable/tablet/tablet-v2.xml", build_client=True, build_server=False
@@ -152,9 +150,9 @@ TEST_CLIENTS = [
         name="cursor-shape-v1",
         sources=[
             TEST_CLIENT_IN_PATH / "cursor-shape-v1.c",
-            QW_PROTO_OUT_PATH / "xdg-shell-client-protocol.c",
-            QW_PROTO_OUT_PATH / "cursor-shape-v1-client-protocol.c",
-            QW_PROTO_OUT_PATH / "tablet-v2-client-protocol.c",
+            QW_PROTO_OUT_PATH / "xdg-shell-protocol.c",
+            QW_PROTO_OUT_PATH / "cursor-shape-v1-protocol.c",
+            QW_PROTO_OUT_PATH / "tablet-v2-protocol.c",
         ],
         includes=[QW_PROTO_OUT_PATH],
     )

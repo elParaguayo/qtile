@@ -243,7 +243,7 @@ int main(int argc, char *argv[]) {
     int opt;
 
     // Handle command line options
-    while ((opt = getopt(argc, argv, "c:h")) != -1) {
+    while ((opt = getopt(argc, argv, "c:hd")) != -1) {
         switch (opt) {
         case 'c':
             if (strcmp(optarg, "text") == 0)
@@ -256,11 +256,13 @@ int main(int argc, char *argv[]) {
                 requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_HELP;
             else if (strcmp(optarg, "pointer") == 0)
                 requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER;
+            else if (strcmp(optarg, "grab") == 0)
+                requested_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRAB;
             break;
 
         case 'h':
             printf("Usage: %s [-c shape] [-d]\n", argv[0]);
-            printf("Shapes: text, crosshair, wait, help, pointer.\n");
+            printf("Shapes: text, crosshair, wait, help, pointer, move.\n");
             printf("-d to enable debugging to /tmp/qtile_test_cursor_client.log.\n");
             exit(EXIT_SUCCESS);
 

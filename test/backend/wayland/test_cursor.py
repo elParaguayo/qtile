@@ -10,7 +10,7 @@ CLIENT_PATH = Path(__file__) / ".." / ".." / ".." / "wayland_clients" / "bin"
 CURSOR_CLIENT = CLIENT_PATH / "cursor-shape-v1"
 
 
-@pytest.mark.parametrize("shape", ["crosshair", "text", "wait", "help"])
+@pytest.mark.parametrize("shape", ["crosshair", "text", "wait", "help", "grab"])
 def test_cursor_shape_protocol(wmanager, shape):
     """Test that the C client can successfully request shapes via the protocol."""
 
@@ -25,16 +25,17 @@ def test_cursor_shape_protocol(wmanager, shape):
     def wait_for_cursor():
         assert cursor_name() != "default"
 
-    wmanager.c.spawn(f"{CURSOR_CLIENT.resolve().as_posix()} -c {shape}")
+    wmanager.c.spawn(f"{CURSOR_CLIENT.resolve().as_posix()} -c {shape} -d")
 
     wait_for_window()
-    wmanager.c.window.set_position_floating(100, 100)
+    wmanager.c.window.set_position_floating(150, 150)
     wmanager.c.core.eval("self.warp_pointer(0, 0, motion=True)")
     assert cursor_name() == "default"
 
     wmanager.c.core.eval("self.warp_pointer(110, 110, motion=True)")
-    # wmanager.c.eval("self.core.warp_pointer(115, 115)")
     wmanager.c.core.eval("self.flush()")
+    wmanager.c.core.eval("self.flush()")
+    # wmanager.c.spawn(f"grim -c /tmp/cursor-{shape}.png")
     wait_for_cursor()
     cursor = cursor_name()
 
