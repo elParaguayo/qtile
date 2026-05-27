@@ -142,6 +142,11 @@ PROTOS = [
     Protocol(
         f"{WAYLAND_PROTOCOLS}/stable/tablet/tablet-v2.xml", build_client=True, build_server=False
     ),
+    Protocol(
+        f"{WAYLAND_PROTOCOLS}/staging/ext-session-lock/ext-session-lock-v1.xml",
+        build_client=True,
+        build_server=False,
+    ),
 ]
 
 
@@ -155,7 +160,16 @@ TEST_CLIENTS = [
             QW_PROTO_OUT_PATH / "tablet-v2-protocol.c",
         ],
         includes=[QW_PROTO_OUT_PATH],
-    )
+    ),
+    TestClient(
+        name="session-lock-v1",
+        sources=[
+            TEST_CLIENT_IN_PATH / "session-lock-v1.c",
+            QW_PROTO_OUT_PATH / "ext-session-lock-v1-protocol.c",
+            QW_PROTO_OUT_PATH / "xdg-shell-protocol.c",
+        ],
+        includes=[QW_PROTO_OUT_PATH],
+    ),
 ]
 
 
