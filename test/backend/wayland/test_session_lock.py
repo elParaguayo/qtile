@@ -90,8 +90,8 @@ class SesionLockClient:
     def assert_ok(self, command: str) -> None:
         assert self.send(command) == "OK"
 
-    def assert_error(self, command: str) -> None:
-        assert self.send(command).startswith("ERROR:")
+    def assert_error(self, command: str, error: str) -> None:
+        assert self.send(command) == f"ERROR: {error}"
 
 
 @pytest.fixture
@@ -224,16 +224,20 @@ def test_crashed(lock_manager):
         client.assert_ok("lock")
         lock_manager.assert_layer_lock_enabled(True)
 
-        client.assert_ok("destroy_without_unlock")
+        client.assert_ok("quit")
         lock_manager.assert_crashed()
         lock_manager.assert_layer_lock_enabled(True)
+
+    with SesionLockClient(lock_manager) as new_client:
+        new_client.assert_error("lock", "compositor rejected lock")
+        new_client.assert_error("unlock", "no active lock")
 
 
 def test_crashed_ipc_disabled(lock_manager):
     """Confirm crashed state is still locked."""
     with SesionLockClient(lock_manager) as client:
         client.assert_ok("lock")
-        client.assert_ok("destroy_without_unlock")
+        client.assert_ok("quit")
         with pytest.raises(CommandError):
             lock_manager.assert_crashed()
 
@@ -244,7 +248,7 @@ def test_multiple_lock_requests(lock_manager):
         client.assert_ok("lock")
         lock_manager.assert_locked()
 
-        client.assert_ok("double_lock")
+        client.assert_error("lock", "compositor rejected lock")
         lock_manager.assert_locked()
 
         client.assert_ok("unlock")

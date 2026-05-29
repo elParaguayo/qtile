@@ -60,8 +60,10 @@ static struct {
     struct wl_list surfaces; /* surface_entry */
 
     struct ext_session_lock_v1 *lock;
+    struct ext_session_lock_v1 *pending_lock;
     bool got_locked;    /* received "locked" event */
     bool lock_finished; /* lock object was destroyed by compositor */
+    bool destroyed;
 } state;
 
 /* ─── Protocol helpers ───────────────────────────────────────────────────── */
@@ -94,8 +96,12 @@ static void lock_finished(void *data, struct ext_session_lock_v1 *lock) {
      */
     (void)data;
     state.lock_finished = true;
-    ext_session_lock_v1_destroy(lock);
-    state.lock = NULL;
+    if (!state.destroyed) {
+        ext_session_lock_v1_destroy(lock);
+    }
+    if (lock == state.lock) {
+        state.lock = NULL;
+    };
 }
 
 static const struct ext_session_lock_v1_listener lock_listener = {
@@ -221,29 +227,35 @@ static void do_roundtrip(void) { wl_display_roundtrip(state.display); }
  */
 static void cmd_lock(void) {
     if (state.lock_manager == NULL) {
-        puts("ERROR: ext_session_lock_manager_v1 not advertised by compositor");
-        return;
-    }
-    if (state.lock != NULL) {
-        puts("ERROR: already holding a lock object");
+        puts("ERROR: ext_session_lock_manager_v1 not advertised");
         return;
     }
 
     state.got_locked = false;
     state.lock_finished = false;
+    state.destroyed = false;
 
-    state.lock = ext_session_lock_manager_v1_lock(state.lock_manager);
-    ext_session_lock_v1_add_listener(state.lock, &lock_listener, NULL);
+    struct ext_session_lock_v1 *lock = ext_session_lock_manager_v1_lock(state.lock_manager);
 
-    /* Give the compositor a chance to reply */
+    state.pending_lock = lock;
+
+    ext_session_lock_v1_add_listener(lock, &lock_listener, NULL);
+
     do_roundtrip();
 
     if (state.got_locked) {
+        state.lock = lock;
+        state.pending_lock = NULL;
+
         puts("OK");
     } else if (state.lock_finished) {
-        puts("ERROR: compositor rejected lock (finished event received)");
+        state.pending_lock = NULL;
+        puts("ERROR: compositor rejected lock");
     } else {
-        puts("ERROR: neither locked nor finished received after roundtrip");
+        ext_session_lock_v1_destroy(lock);
+        state.pending_lock = NULL;
+
+        puts("ERROR: no response after roundtrip");
     }
 }
 
@@ -256,10 +268,6 @@ static void cmd_unlock(void) {
         puts("ERROR: no active lock");
         return;
     }
-    if (!state.got_locked) {
-        puts("ERROR: lock was never confirmed (no locked event)");
-        return;
-    }
 
     ext_session_lock_v1_unlock_and_destroy(state.lock);
     state.lock = NULL;
@@ -270,74 +278,11 @@ static void cmd_unlock(void) {
 }
 
 /*
- * destroy_without_unlock
- * Simulate a lock-client crash: destroy the lock object without unlocking.
- * Per the protocol, the compositor MUST keep showing the blanking rects and
- * the compositor should transition to a "crashed" state (in qtile's terms,
- * QW_SESSION_LOCK_CRASHED).
- *
- * We verify this by attempting a second lock immediately afterwards — the
- * compositor must reject it because lock_state != UNLOCKED.
- */
-static void cmd_destroy_without_unlock(void) {
-    if (state.lock == NULL) {
-        puts("ERROR: no active lock to destroy");
-        return;
-    }
-
-    /* Destroy all surfaces first to avoid protocol errors */
-    struct surface_entry *se, *tmp;
-    wl_list_for_each_safe(se, tmp, &state.surfaces, link) {
-        ext_session_lock_surface_v1_destroy(se->lock_surface);
-        wl_surface_destroy(se->wl_surface);
-        wl_list_remove(&se->link);
-        free(se);
-    }
-
-    ext_session_lock_v1_destroy(state.lock);
-    state.lock = NULL;
-    state.got_locked = false;
-    wl_display_flush(state.display);
-
-    /* Give compositor time to process the vanishing client */
-    drain_events(200);
-
-    /*
-     * Now try to acquire a new lock.  The compositor should reject it with a
-     * "finished" event because it is in the crashed state.
-     */
-    state.lock_finished = false;
-    state.got_locked = false;
-
-    struct ext_session_lock_v1 *probe = ext_session_lock_manager_v1_lock(state.lock_manager);
-    ext_session_lock_v1_add_listener(probe, &lock_listener, NULL);
-    do_roundtrip();
-
-    bool rejected = state.lock_finished && !state.got_locked;
-
-    if (rejected) {
-        /* Clean up the rejected (already destroyed) object */
-        state.lock = NULL;
-        puts("OK"); /* compositor correctly stayed locked/crashed */
-    } else {
-        /*
-         * The compositor let us lock again — that is wrong; the screen should
-         * have remained blanked.
-         */
-        if (probe && !state.lock_finished) {
-            ext_session_lock_v1_destroy(probe);
-        }
-        state.lock = NULL;
-        puts("ERROR: compositor allowed a new lock after client crash (should stay locked)");
-    }
-}
-
-/*
  * create_surface
  * Create one lock surface per advertised output.
  */
 static void cmd_create_surface(void) {
-    if (state.lock == NULL || !state.got_locked) {
+    if (state.lock == NULL) {
         puts("ERROR: not locked");
         return;
     }
@@ -409,74 +354,12 @@ static void cmd_destroy_surface(void) {
 }
 
 /*
- * double_lock
- * Attempt a second concurrent lock while one is already active.
- * The compositor must reject it (send "finished" without "locked").
- *
- * This tests the guard in qw_session_lock_handle_new():
- *   if (server->lock_state != QW_SESSION_LOCK_UNLOCKED) {
- *       wlr_session_lock_v1_destroy(session_lock);
- *       return;
- *   }
- */
-static void cmd_double_lock(void) {
-    if (state.lock == NULL || !state.got_locked) {
-        puts("ERROR: must be locked first (use 'lock')");
-        return;
-    }
-
-    bool prev_finished = state.lock_finished;
-    state.lock_finished = false;
-
-    struct ext_session_lock_v1 *second = ext_session_lock_manager_v1_lock(state.lock_manager);
-
-    bool second_locked = false;
-    bool second_finished = false;
-
-    /* Temporary inline listener just for the second attempt */
-    struct {
-        bool *locked;
-        bool *finished;
-    } cb_state = {&second_locked, &second_finished};
-
-    /* We can't easily add a separate listener struct here without more
-     * boilerplate, so we reuse the global lock_listener but capture via
-     * the global state flags (reset them first). */
-    (void)cb_state; /* suppress unused-variable warning */
-
-    /* Reset global flags (the first lock's flags stay in got_locked) */
-    state.lock_finished = false;
-    ext_session_lock_v1_add_listener(second, &lock_listener, NULL);
-    do_roundtrip();
-
-    bool rejected = state.lock_finished && !state.got_locked;
-
-    /* got_locked is still true from the first lock; lock_finished is the
-     * result of the second attempt's "finished" event.           */
-
-    if (state.lock_finished && state.got_locked) {
-        /* "finished" arrived on the second object, first lock still valid */
-        puts("OK"); /* compositor correctly rejected the second lock */
-    } else if (!state.lock_finished) {
-        /* Second lock wasn't rejected */
-        ext_session_lock_v1_destroy(second);
-        puts("ERROR: compositor accepted a second lock while one was already active");
-    } else {
-        puts("ERROR: unexpected state during double_lock test");
-    }
-
-    /* Restore lock_finished to its pre-test value */
-    state.lock_finished = prev_finished;
-    (void)rejected;
-}
-
-/*
  * check_locked
  * Verify we have received the "locked" event (synchronous check).
  */
 static void cmd_check_locked(void) {
     do_roundtrip();
-    if (state.lock != NULL && state.got_locked) {
+    if (state.lock != NULL) {
         puts("OK");
     } else {
         puts("ERROR: not in locked state");
@@ -489,7 +372,7 @@ static void cmd_check_locked(void) {
  */
 static void cmd_check_unlocked(void) {
     do_roundtrip();
-    if (state.lock == NULL && !state.got_locked) {
+    if (state.lock == NULL) {
         puts("OK");
     } else {
         puts("ERROR: still in locked state");
@@ -550,14 +433,10 @@ static void dispatch_command(char *line) {
         cmd_lock();
     else if (strcmp(verb, "unlock") == 0)
         cmd_unlock();
-    else if (strcmp(verb, "destroy_without_unlock") == 0)
-        cmd_destroy_without_unlock();
     else if (strcmp(verb, "create_surface") == 0)
         cmd_create_surface();
     else if (strcmp(verb, "destroy_surface") == 0)
         cmd_destroy_surface();
-    else if (strcmp(verb, "double_lock") == 0)
-        cmd_double_lock();
     else if (strcmp(verb, "check_locked") == 0)
         cmd_check_locked();
     else if (strcmp(verb, "check_unlocked") == 0)
@@ -665,7 +544,7 @@ int main(void) {
         free(se);
     }
     if (state.lock) {
-        ext_session_lock_v1_destroy(state.lock);
+        ext_session_lock_v1_unlock_and_destroy(state.lock);
     }
     wl_display_disconnect(state.display);
     return 0;
