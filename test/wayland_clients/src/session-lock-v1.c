@@ -27,6 +27,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <wayland-client.h>
@@ -35,6 +38,12 @@
 #include "ext-session-lock-v1-client-protocol.h"
 
 /* ─── State ──────────────────────────────────────────────────────────────── */
+
+struct buffer {
+    struct wl_buffer *wl_buffer;
+    void *data;
+    size_t size;
+};
 
 struct output_entry {
     struct wl_output *wl_output;
@@ -46,6 +55,9 @@ struct surface_entry {
     struct ext_session_lock_surface_v1 *lock_surface;
     struct wl_surface *wl_surface;
     struct output_entry *output;
+    struct buffer *buffer;
+    uint32_t width;
+    uint32_t height;
     bool configured;
     struct wl_list link;
 };
@@ -54,6 +66,7 @@ static struct {
     struct wl_display *display;
     struct wl_registry *registry;
     struct wl_compositor *compositor;
+    struct wl_shm *shm;
     struct ext_session_lock_manager_v1 *lock_manager;
 
     struct wl_list outputs;  /* output_entry */
@@ -66,14 +79,89 @@ static struct {
     bool destroyed;
 } state;
 
+static int create_shm_file(size_t size) {
+    char template[] = "/tmp/session-lock-shm-XXXXXX";
+    int fd = mkstemp(template);
+    if (fd < 0) {
+        return -1;
+    }
+
+    unlink(template);
+
+    if (ftruncate(fd, (off_t)size) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
+static struct buffer *create_buffer(uint32_t width, uint32_t height) {
+    const uint32_t stride = width * 4;
+    const uint32_t size = stride * height;
+
+    int fd = create_shm_file(size);
+    if (fd < 0) {
+        return NULL;
+    }
+
+    void *data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+    if (data == MAP_FAILED) {
+        close(fd);
+        return NULL;
+    }
+
+    struct wl_shm_pool *pool = wl_shm_create_pool(state.shm, fd, size);
+
+    struct wl_buffer *buffer =
+        wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
+
+    wl_shm_pool_destroy(pool);
+    close(fd);
+
+    if (buffer == NULL) {
+        munmap(data, size);
+        return NULL;
+    }
+
+    /* Fill solid dark grey */
+    uint32_t *pixels = data;
+    for (uint32_t i = 0; i < width * height; i++) {
+        pixels[i] = 0xFF202020;
+    }
+
+    struct buffer *buf = calloc(1, sizeof(*buf));
+    buf->wl_buffer = buffer;
+    buf->data = data;
+    buf->size = size;
+
+    return buf;
+}
+
 /* ─── Protocol helpers ───────────────────────────────────────────────────── */
 
 static void surface_configure(void *data, struct ext_session_lock_surface_v1 *lock_surface,
                               uint32_t serial, uint32_t width, uint32_t height) {
     struct surface_entry *se = data;
+
     se->configured = true;
+    se->width = width;
+    se->height = height;
+
     ext_session_lock_surface_v1_ack_configure(lock_surface, serial);
-    /* Commit so the compositor considers the surface mapped */
+
+    if (se->buffer == NULL) {
+        se->buffer = create_buffer(width, height);
+
+        if (se->buffer == NULL) {
+            fprintf(stderr, "failed to create buffer\n");
+            return;
+        }
+    }
+
+    wl_surface_attach(se->wl_surface, se->buffer->wl_buffer, 0, 0);
+    wl_surface_damage_buffer(se->wl_surface, 0, 0, INT32_MAX, INT32_MAX);
     wl_surface_commit(se->wl_surface);
 }
 
@@ -179,6 +267,8 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
         oe->wl_output = wl_registry_bind(registry, name, &wl_output_interface, 4);
         wl_output_add_listener(oe->wl_output, &output_listener, oe);
         wl_list_insert(&state.outputs, &oe->link);
+    } else if (strcmp(interface, wl_shm_interface.name) == 0) {
+        state.shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
     }
 }
 
@@ -214,6 +304,23 @@ static bool drain_events(int timeout_ms) {
 }
 
 static void do_roundtrip(void) { wl_display_roundtrip(state.display); }
+
+static void destroy_surfaces(void) {
+    struct surface_entry *se, *tmp;
+    wl_list_for_each_safe(se, tmp, &state.surfaces, link) {
+        if (se->buffer) {
+            wl_buffer_destroy(se->buffer->wl_buffer);
+            munmap(se->buffer->data, se->buffer->size);
+            free(se->buffer);
+        }
+        ext_session_lock_surface_v1_destroy(se->lock_surface);
+        wl_surface_destroy(se->wl_surface);
+        wl_list_remove(&se->link);
+        free(se);
+    }
+
+    do_roundtrip();
+}
 
 /* ─── Commands ───────────────────────────────────────────────────────────── */
 
@@ -272,7 +379,7 @@ static void cmd_unlock(void) {
     ext_session_lock_v1_unlock_and_destroy(state.lock);
     state.lock = NULL;
     state.got_locked = false;
-
+    destroy_surfaces();
     do_roundtrip();
     puts("OK");
 }
@@ -340,16 +447,8 @@ static void cmd_destroy_surface(void) {
         puts("ERROR: no surfaces to destroy");
         return;
     }
+    destroy_surfaces();
 
-    struct surface_entry *se, *tmp;
-    wl_list_for_each_safe(se, tmp, &state.surfaces, link) {
-        ext_session_lock_surface_v1_destroy(se->lock_surface);
-        wl_surface_destroy(se->wl_surface);
-        wl_list_remove(&se->link);
-        free(se);
-    }
-
-    do_roundtrip();
     puts("OK");
 }
 
@@ -539,6 +638,11 @@ int main(void) {
     /* Cleanup */
     struct surface_entry *se, *stmp;
     wl_list_for_each_safe(se, stmp, &state.surfaces, link) {
+        if (se->buffer) {
+            wl_buffer_destroy(se->buffer->wl_buffer);
+            munmap(se->buffer->data, se->buffer->size);
+            free(se->buffer);
+        }
         ext_session_lock_surface_v1_destroy(se->lock_surface);
         wl_surface_destroy(se->wl_surface);
         free(se);

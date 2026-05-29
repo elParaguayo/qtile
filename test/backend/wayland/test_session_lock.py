@@ -7,6 +7,7 @@ import pytest
 
 from libqtile.backend.wayland._ffi import lib
 from libqtile.command.base import CommandError
+from test.conftest import dualmonitor
 
 CLIENT = (
     (Path(__file__).parent / ".." / ".." / "wayland_clients" / "bin" / "session-lock-v1")
@@ -121,6 +122,54 @@ def find_layer_lock(stacking_info):
     return None
 
 
+def find_node_at_position(node, node_type, x, y, parent_x=0, parent_y=0):
+    """
+    Looks for a node at given position but, as tree nodes are relative,
+    we need to track absolute position of child node.
+    """
+    if not isinstance(node, dict):
+        return False
+
+    abs_x = parent_x + node["x"]
+    abs_y = parent_y + node["y"]
+
+    if node["type"] == node_type:
+        return abs_x == x and abs_y == y
+
+    for child in node.get("children", []):
+        result = find_node_at_position(
+            child,
+            node_type,
+            x,
+            y,
+            abs_x,
+            abs_y,
+        )
+        if result:
+            return True
+
+    return False
+
+
+def count_node_types(node, counts=None):
+    if counts is None:
+        counts = {}
+
+    if not isinstance(node, dict):
+        return counts
+
+    # Count current node type
+    node_type = node.get("type")
+    if node_type:
+        counts[node_type] = counts.get(node_type, 0) + 1
+
+    # Recurse through children
+    for child in node.get("children", []):
+        count_node_types(child, counts)
+
+    return counts
+
+
 @pytest.fixture
 def lock_manager(wmanager, ipc_enable):
     """Modified manager instance with additional methods to test session lock."""
@@ -141,11 +190,32 @@ def lock_manager(wmanager, ipc_enable):
     def assert_crashed(self) -> None:
         assert self._lock_state() == LockState.CRASHED
 
-    def assert_layer_lock_enabled(self, enabled):
+    def _get_layer_lock(self) -> dict:
         info = self.c.core.stacking_info()
         layer = find_layer_lock(info)
         assert layer
-        assert layer["enabled"] == enabled
+        return layer
+
+    def assert_layer_lock_enabled(self, enabled):
+        assert self._get_layer_lock()["enabled"] == enabled
+
+    def assert_rect_at_position(self, x, y):
+        layer = self._get_layer_lock()
+        assert find_node_at_position(layer, "rect", x, y)
+
+    def assert_buffer_at_position(self, x, y):
+        layer = self._get_layer_lock()
+        assert find_node_at_position(layer, "buffer", x, y)
+
+    def assert_rect_count(self, num):
+        layer = self._get_layer_lock()
+        counts = count_node_types(layer)
+        assert counts.get("rect", 0) == num
+
+    def assert_buffer_count(self, num):
+        layer = self._get_layer_lock()
+        counts = count_node_types(layer)
+        assert counts.get("buffer", 0) == num
 
     # bind methods to our manager instance
     for f in [
@@ -154,7 +224,12 @@ def lock_manager(wmanager, ipc_enable):
         assert_locked,
         assert_unlocked,
         assert_crashed,
+        _get_layer_lock,
         assert_layer_lock_enabled,
+        assert_rect_at_position,
+        assert_buffer_at_position,
+        assert_rect_count,
+        assert_buffer_count,
     ]:
         setattr(wmanager, f.__name__, MethodType(f, wmanager))
 
@@ -178,6 +253,7 @@ def make_test_env(mgr):
 
 @enable_ipc
 def test_session_lock_server(lock_manager):
+    """Basic test of locked state."""
     with SesionLockClient(lock_manager) as client:
         # Session is unlocked so layer lock is disabled
         lock_manager.assert_layer_lock_enabled(False)
@@ -234,7 +310,7 @@ def test_crashed(lock_manager):
 
 
 def test_crashed_ipc_disabled(lock_manager):
-    """Confirm crashed state is still locked."""
+    """Confirm IPC is still locked when in crashed state."""
     with SesionLockClient(lock_manager) as client:
         client.assert_ok("lock")
         client.assert_ok("quit")
@@ -244,6 +320,7 @@ def test_crashed_ipc_disabled(lock_manager):
 
 @enable_ipc
 def test_multiple_lock_requests(lock_manager):
+    """Multiple requests for a lock should be rejected."""
     with SesionLockClient(lock_manager) as client:
         client.assert_ok("lock")
         lock_manager.assert_locked()
@@ -253,3 +330,49 @@ def test_multiple_lock_requests(lock_manager):
 
         client.assert_ok("unlock")
         lock_manager.assert_unlocked()
+
+
+@enable_ipc
+def test_lock_surface_single(lock_manager):
+    """Check that lock surface is added to LAYER_LOCK."""
+    with SesionLockClient(lock_manager) as client:
+        lock_manager.assert_rect_count(1)
+        lock_manager.assert_rect_at_position(0, 0)
+
+        lock_manager.assert_buffer_count(0)
+
+        client.assert_ok("lock")
+        client.assert_ok("create_surface")
+        client.assert_ok("check_surface_count 1")
+
+        lock_manager.assert_buffer_count(1)
+        lock_manager.assert_buffer_at_position(0, 0)
+
+        client.assert_ok("unlock")
+        lock_manager.assert_buffer_count(0)
+
+
+@dualmonitor
+@enable_ipc
+def test_lock_surface_dualmonito(lock_manager):
+    """
+    Check that lock surfaces are added to LAYER_LOCK and
+    positioned correctly on multiple monitors.
+    """
+    with SesionLockClient(lock_manager) as client:
+        lock_manager.assert_rect_count(2)
+        lock_manager.assert_rect_at_position(0, 0)
+        lock_manager.assert_rect_at_position(800, 0)
+
+        lock_manager.assert_buffer_count(0)
+
+        client.assert_ok("lock")
+        client.assert_ok("create_surface")
+        client.assert_ok("check_surface_count 2")
+
+        lock_manager.assert_buffer_count(2)
+        lock_manager.assert_buffer_at_position(0, 0)
+        lock_manager.assert_buffer_at_position(800, 0)
+
+        client.assert_ok("unlock")
+        lock_manager.assert_buffer_count(0)
