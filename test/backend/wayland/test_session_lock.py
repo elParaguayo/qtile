@@ -26,9 +26,9 @@ class ScriptError(Exception):
 
 
 class SesionLockClient:
-    def __init__(self, env):
+    def __init__(self, manager):
         self.process = None
-        self.env = env
+        self.manager = manager
 
     def __enter__(self):
         self.process = subprocess.Popen(
@@ -38,7 +38,7 @@ class SesionLockClient:
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            env=self.env,
+            env=make_test_env(self.manager),
         )
         return self
 
@@ -59,6 +59,9 @@ class SesionLockClient:
                 self.process.stdout.close()
                 self.process.stderr.close()
 
+    def flush_manager(self):
+        self.manager.c.core.flush()
+
     def send(self, command: str) -> str:
         """
         Send a command and wait for one-line response.
@@ -67,16 +70,15 @@ class SesionLockClient:
             OK
             ERROR: message
         """
-
         if self.process is None:
             raise ScriptError("Process not started")
 
         if self.process.poll() is not None:
             raise ScriptError("Process has exited")
-
+        self.flush_manager()
         self.process.stdin.write(command + "\n")
         self.process.stdin.flush()
-
+        self.flush_manager()
         response = self.process.stdout.readline()
 
         if response == "":
@@ -176,7 +178,7 @@ def make_test_env(mgr):
 
 @enable_ipc
 def test_session_lock_server(lock_manager):
-    with SesionLockClient(env=make_test_env(lock_manager)) as client:
+    with SesionLockClient(lock_manager) as client:
         # Session is unlocked so layer lock is disabled
         lock_manager.assert_layer_lock_enabled(False)
 
@@ -193,7 +195,7 @@ def test_session_lock_server(lock_manager):
 
 def test_session_lock_client(lock_manager):
     """Check that correct messages are sent to clients."""
-    with SesionLockClient(env=make_test_env(lock_manager)) as client:
+    with SesionLockClient(lock_manager) as client:
         client.assert_ok("lock")
         client.assert_ok("check_locked")
 
@@ -205,7 +207,7 @@ def test_ipc_disabled(lock_manager):
     """
     Confirm IPC is unavailable when locked and re-enabled when lock is removed.
     """
-    with SesionLockClient(env=make_test_env(lock_manager)) as client:
+    with SesionLockClient(lock_manager) as client:
         client.assert_ok("lock")
         with pytest.raises(CommandError):
             lock_manager.assert_locked()
@@ -216,8 +218,29 @@ def test_ipc_disabled(lock_manager):
 
 
 @enable_ipc
+def test_crashed(lock_manager):
+    """Confirm crashed state is still locked."""
+    with SesionLockClient(lock_manager) as client:
+        client.assert_ok("lock")
+        lock_manager.assert_layer_lock_enabled(True)
+
+        client.assert_ok("destroy_without_unlock")
+        lock_manager.assert_crashed()
+        lock_manager.assert_layer_lock_enabled(True)
+
+
+def test_crashed_ipc_disabled(lock_manager):
+    """Confirm crashed state is still locked."""
+    with SesionLockClient(lock_manager) as client:
+        client.assert_ok("lock")
+        client.assert_ok("destroy_without_unlock")
+        with pytest.raises(CommandError):
+            lock_manager.assert_crashed()
+
+
+@enable_ipc
 def test_multiple_lock_requests(lock_manager):
-    with SesionLockClient(env=make_test_env(lock_manager)) as client:
+    with SesionLockClient(lock_manager) as client:
         client.assert_ok("lock")
         lock_manager.assert_locked()
 

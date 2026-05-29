@@ -217,6 +217,7 @@ void qw_session_lock_handle_new_surface(struct wl_listener *listener, void *data
 void qw_session_lock_handle_new(struct wl_listener *listener, void *data) {
     struct qw_server *server = wl_container_of(listener, server, new_session_lock);
     struct wlr_session_lock_v1 *session_lock = data;
+    wlr_log(WLR_ERROR, "New lock requested. State=%d", server->lock_state);
 
     // Reject any incoming lock request if already locked or crashed
     if (server->lock_state != QW_SESSION_LOCK_UNLOCKED) {

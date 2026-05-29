@@ -223,10 +223,10 @@ class Server:
             logger.warning("Invalid data received, closing connection")
         else:
             # Don't handle requests when session is locked
-            if self.locked.is_set():
-                rep = (1, {"error": "Session locked."})
-            else:
-                rep = self.handler(req)
+            # if self.locked.is_set():
+            #     rep = (1, {"error": "Session locked."})
+            # else:
+            rep = self.handler(req)
 
             result = _IPC.pack(rep, is_json=is_json)
 
