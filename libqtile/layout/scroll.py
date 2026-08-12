@@ -95,6 +95,9 @@ class Scroll(base.Layout):
         c._last_fullscreen = {}
         return c
 
+    def hide(self) -> None:
+        self._last_geometry.clear()
+
     def _get_window_position(self, client: Window) -> tuple[int, int] | None:
         for i, col in enumerate(self.clients):
             if client in col:
