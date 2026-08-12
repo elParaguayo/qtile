@@ -308,9 +308,13 @@ class Scroll(base.Layout):
                 border_width,
                 border_color,
             )
+
+            win_geom = ScreenRect(col_x, win_y, column_width, win_h).shrink(self.margin)
+            screen_geom = screen_rect.shrink(self.margin)
+            clip = screen_geom.intersects(win_geom, translate=True)
             self._set_visible(win, True)
             if self._last_geometry.get(win) != geom:
-                win.place(*geom, margin=self.margin)
+                win.place(*geom, margin=self.margin, clip=clip)
                 self._last_geometry[win] = geom
 
     def add_client(self, client: Window) -> None:
