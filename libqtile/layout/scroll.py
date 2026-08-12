@@ -153,12 +153,6 @@ class Scroll(base.Layout):
             self._last_geometry.pop(win, None)
         self._last_fullscreen[win] = win.fullscreen
 
-    def _set_visible(self, win: Window, visible: bool) -> None:
-        """
-        Show or hide a window.
-        """
-        win.unhide() if visible else win.hide()
-
     def focus(self, client: Window) -> None:
         self.focused = client
         pos = self._get_window_position(client)
@@ -179,12 +173,12 @@ class Scroll(base.Layout):
                 self.border_focus if win.has_focus else self.border_normal,
                 margin=self.margin,
             )
-            self._set_visible(win, True)
+            win.show()
             return
 
         pos = self._get_window_position(client)
         if not self.clients or pos is None:
-            self._set_visible(client, False)
+            win.hide()
             return
 
         if client.has_focus:
@@ -209,7 +203,7 @@ class Scroll(base.Layout):
 
             if not visible:
                 for win in col:
-                    self._set_visible(win, False)
+                    win.hide()
             else:
                 self._layout_column(i, col, col_x, column_width, screen_rect)
 
@@ -296,7 +290,7 @@ class Scroll(base.Layout):
             cur_y += win_h
 
             if win_y + win_h < screen_rect.y or win_y > screen_rect.y + screen_rect.height:
-                self._set_visible(win, False)
+                win.hide()
                 continue
 
             border_color = self.border_focus if win.has_focus else self.border_normal
@@ -312,7 +306,7 @@ class Scroll(base.Layout):
             win_geom = ScreenRect(col_x, win_y, column_width, win_h).shrink(self.margin)
             screen_geom = screen_rect.shrink(self.margin)
             clip = screen_geom.intersects(win_geom, translate=True)
-            self._set_visible(win, True)
+            win.show()
             if self._last_geometry.get(win) != geom:
                 win.place(*geom, margin=self.margin, clip=clip)
                 self._last_geometry[win] = geom
@@ -410,7 +404,7 @@ class Scroll(base.Layout):
     def previous(self) -> None:
         self.up()
 
-    @expose_command()
+    @expose_command("scroll_up")
     def up(self) -> None:
         """
         Focus previous window in the current column (scrolls into view).
@@ -423,7 +417,7 @@ class Scroll(base.Layout):
             self.focused_window = win_idx - 1
             self.group.focus(self.clients[col_idx][win_idx - 1], True)
 
-    @expose_command()
+    @expose_command("scroll_down")
     def down(self) -> None:
         """
         Focus next window in the current column (scrolls into view).
@@ -436,21 +430,7 @@ class Scroll(base.Layout):
             self.focused_window = win_idx + 1
             self.group.focus(self.clients[col_idx][win_idx + 1], True)
 
-    @expose_command()
-    def scroll_up(self) -> None:
-        """
-        Scroll up within the focused column (alias for up).
-        """
-        self.up()
-
-    @expose_command()
-    def scroll_down(self) -> None:
-        """
-        Scroll down within the focused column (alias for down).
-        """
-        self.down()
-
-    @expose_command()
+    @expose_command("left")
     def scroll_left(self) -> None:
         """
         Focus previous column.
@@ -461,7 +441,7 @@ class Scroll(base.Layout):
         self.focused_window = min(self.focused_window, len(self.clients[self.focused_column]) - 1)
         self.group.focus(self.clients[self.focused_column][self.focused_window], True)
 
-    @expose_command()
+    @expose_command("right")
     def scroll_right(self) -> None:
         """
         Focus next column.
@@ -471,14 +451,6 @@ class Scroll(base.Layout):
         self.focused_column += 1
         self.focused_window = min(self.focused_window, len(self.clients[self.focused_column]) - 1)
         self.group.focus(self.clients[self.focused_column][self.focused_window], True)
-
-    @expose_command()
-    def left(self) -> None:
-        self.scroll_left()
-
-    @expose_command()
-    def right(self) -> None:
-        self.scroll_right()
 
     @expose_command()
     def shuffle_up(self) -> None:
@@ -572,7 +544,7 @@ class Scroll(base.Layout):
         self.focused_window = 0
         self.group.layout_all()
 
-    @expose_command()
+    @expose_command("new_column_left")
     def new_column_before(self) -> None:
         """
         Expel focused window into its own column, placed before current.
@@ -584,7 +556,7 @@ class Scroll(base.Layout):
         if len(self.clients[col_idx]) > 1:
             self._break_into_new_column(col_idx, win_idx, before=True)
 
-    @expose_command()
+    @expose_command("new_column_right")
     def new_column_after(self) -> None:
         """
         Expel focused window into its own column, placed after current.
@@ -595,14 +567,6 @@ class Scroll(base.Layout):
         col_idx, win_idx = pos
         if len(self.clients[col_idx]) > 1:
             self._break_into_new_column(col_idx, win_idx, before=False)
-
-    @expose_command()
-    def new_column_left(self) -> None:
-        self.new_column_before()
-
-    @expose_command()
-    def new_column_right(self) -> None:
-        self.new_column_after()
 
     @expose_command()
     def grow(self) -> None:
