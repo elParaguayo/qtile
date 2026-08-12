@@ -8,6 +8,7 @@ from libqtile.backend.base import FloatStates
 from libqtile.backend.base.window import WindowType
 from libqtile.backend.wayland.drawer import Drawer
 from libqtile.command.base import CommandError, CommandObject, ItemT, expose_command
+from libqtile.config import ScreenRect
 from libqtile.core.manager import Qtile
 from libqtile.group import _Group
 from libqtile.log_utils import logger
@@ -187,6 +188,7 @@ class Base(base._Window):
         above: bool = False,
         margin: int | list[int] | None = None,
         respect_hints: bool = False,
+        clip: ScreenRect | tuple[int, int, int, int] | None = None
     ) -> None:
         # Adjust the placement to account for layout margins, if there are any.
         # TODO: is respect_hints only for X11?
@@ -210,6 +212,8 @@ class Base(base._Window):
             y += margin[0]
             width -= margin[1] + margin[3]
             height -= margin[0] + margin[2]
+
+        self._set_clip_area(clip, borderwidth)
 
         # TODO: respect hints
 
@@ -891,6 +895,26 @@ class Window(Base, base.Window):
     @expose_command()
     def disable_fullscreen(self) -> None:
         self.fullscreen = False
+
+    def add_config_inhibitors(self) -> None:
+        for rule in self.qtile.config.idle_inhibitors:
+            if rule.match is None or rule.match.compare(self):
+                self.add_idle_inhibitor(rule.when)
+
+    @expose_command()
+    def add_idle_inhibitor(self, inhibitor_type: str = "open") -> None:
+        """
+        Create an inhibitor rule for this window.
+
+        ``inhibitor_type`` should be one of ``"open"``, ``"focus"``, ``"fullscreen"``
+        or ``"visible"``. Default value is ``"open"``.
+        """
+        self.qtile.core.inhibitor_manager.add_window_inhibitor(self, inhibitor_type)
+
+    @expose_command()
+    def remove_idle_inhibitor(self) -> None:
+        """Remove inhibitor rule for this window."""
+        self.qtile.core.inibitor_manager.remove_window_inhibitor(self)
 
 
 class Static(Base, base.Static):

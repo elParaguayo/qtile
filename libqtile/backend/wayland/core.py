@@ -956,6 +956,12 @@ class Core(base.Core):
         """Destroy the nth output at runtime. Only available in an active test."""
         lib.qw_server_test_destroy_output(self.qw, index)
 
+    def set_window_clipping(self, win: Window, area: ScreenRect | tuple[int, int, int, int] | None, border_width: int) -> None:
+        if area is None or not area:
+            lib.qw_view_clear_clip_area(win._ptr)
+        else:
+            x, y, w, h = area
+            lib.qw_view_set_clip_area(win._ptr, x, y, w, h, border_width)
 
 class Painter:
     """

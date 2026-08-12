@@ -15,6 +15,7 @@ import cairocffi.xcb
 import xcffib
 import xcffib.randr
 import xcffib.screensaver
+import xcffib.shape
 import xcffib.xinerama
 import xcffib.xproto
 from xcffib.xfixes import SelectionEventMask
@@ -498,12 +499,38 @@ class XFixes:
         self.conn.xfixes.ext.SelectSelectionInput(window.wid, _selection, self.selection_mask)
 
 
+class Shape:
+    def __init__(self, conn):
+        self.conn = conn
+        self.ext = conn.conn(xcffib.shape.key)
+
+    def clear_clip(self, window):
+        self.ext.Mask(xcffib.shape.SO.Set, xcffib.shape.SK.Bounding, window.window.wid, 0, 0, 0)
+
+    def set_clip(self, window, area, border_width):
+        x, y, w, h = area
+        x -= border_width
+        y -= border_width
+        rect = xcffib.xproto.RECTANGLE.synthetic(x, y, w, h)
+        self.ext.Rectangles(
+            xcffib.shape.SO.Set,
+            xcffib.shape.SK.Bounding,
+            xcffib.xproto.ClipOrdering.Unsorted,
+            window.window.wid,
+            0,
+            0,
+            1,
+            [rect],
+        )
+
+
 class Connection:
     _extmap = {
         "xinerama": Xinerama,
         "randr": RandR,
         "xfixes": XFixes,
         "mit-screen-saver": ScreenSaver,
+        "shape": Shape,
     }
 
     def __init__(self, display):

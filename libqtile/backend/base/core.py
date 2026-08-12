@@ -10,7 +10,7 @@ from libqtile import config, hook
 from libqtile.backend.base.idle_inhibit import IdleInhibitorManager
 from libqtile.backend.base.idle_notify import IdleNotifier
 from libqtile.command.base import CommandObject, ItemT, expose_command
-from libqtile.config import Screen
+from libqtile.config import Screen, ScreenRect
 from libqtile.group import _Group
 
 if typing.TYPE_CHECKING:
@@ -189,3 +189,6 @@ class Core(CommandObject, metaclass=ABCMeta):
             for inhibitor in self.idle_inhibitor_manager.inhibitors
             if not active_only or (active_only and inhibitor.check())
         ]
+
+    def set_window_clipping(self, window: Window, area: ScreenRect | tuple[int, int, int, int] | None, border_width: int) -> None:
+        pass

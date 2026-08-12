@@ -275,25 +275,27 @@ static struct wlr_scene_node *qw_xwayland_view_get_tree_node(void *self) {
 
 // Clip the xwayland_view's scene tree if needed
 static void qw_xwayland_view_clip(struct qw_xwayland_view *xwayland_view) {
-    // Only clip if scene_tree exists, node is disabled, and node is linked
+    // Only clip if scene_tree exists and node is linked
     if (!xwayland_view->scene_tree) {
-        return;
-    }
-    if (xwayland_view->scene_tree->node.enabled) {
         return;
     }
     if (!xwayland_view->scene_tree->node.link.next) {
         return;
     }
 
-    // clang-format off
-    struct wlr_box clip = {
-        .x = xwayland_view->geom.x,
-        .y = xwayland_view->geom.y,
-        .width = xwayland_view->base.width,
-        .height = xwayland_view->base.height
-    };
-    // clang-format on
+    struct wlr_box clip;
+    if (xwayland_view->base.has_clip) {
+        clip = xwayland_view->base.clip_box;
+        clip.x -= xwayland_view->base.clip_offset;
+        clip.y -= xwayland_view->base.clip_offset;
+    } else {
+        clip = (struct wlr_box){
+            .x = 0,
+            .y = 0,
+            .width = xwayland_view->base.width,
+            .height = xwayland_view->base.height,
+        };
+    }
 
     wlr_scene_subsurface_tree_set_clip(&xwayland_view->scene_tree->node, &clip);
 }
@@ -335,7 +337,7 @@ static void qw_xwayland_view_place(void *self, int x, int y, int width, int heig
     wlr_scene_node_set_position(&xwayland_view->base.content_tree->node, x, y);
 
     // TODO: don't force repo
-    if (needs_repos) {
+    if (needs_repos || xwayland_view->base.has_clip) {
         // For XWayland, we configure the surface position and size
         wlr_xwayland_surface_configure(qw_xsurface, x, y, width, height);
         qw_xwayland_view_clip(xwayland_view);

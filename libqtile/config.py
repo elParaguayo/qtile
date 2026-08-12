@@ -354,6 +354,15 @@ class ScreenRect:
     width: int
     height: int
 
+    def __iter__(self):
+        yield self.x
+        yield self.y
+        yield self.width
+        yield self.height
+
+    def __bool__(self) -> bool:
+        return any(x != 0 for x in self)
+
     def hsplit(self, columnwidth: int) -> tuple[ScreenRect, ScreenRect]:
         assert 0 < columnwidth < self.width
         return (
@@ -367,6 +376,40 @@ class ScreenRect:
             self.__class__(self.x, self.y, self.width, rowheight),
             self.__class__(self.x, self.y + rowheight, self.width, self.height - rowheight),
         )
+
+    def shrink(self, amount: int) -> ScreenRect:
+        return ScreenRect(
+            self.x + amount,
+            self.y + amount,
+            self.width - amount * 2,
+            self.height - amount * 2
+        )
+
+    def intersects(self, other: ScreenRect | tuple[int, int, int, int], translate: bool = False) -> ScreenRect:
+        sx, sy, sw, sh = self
+        ox, oy, ow, oh = other
+
+        # 1. Calculate intersection in global coordinates
+        inter_x1 = max(sx, ox)
+        inter_y1 = max(sy, oy)
+        inter_x2 = min(sx + sw, ox + ow)
+        inter_y2 = min(sy + sh, oy + oh)
+
+        # Check if there is no overlap
+        if inter_x1 >= inter_x2 or inter_y1 >= inter_y2:
+            return ScreenRect(0, 0, 0, 0)
+
+        # 2. Translate global intersection to relative coordinates for other rect
+        local_x = inter_x1
+        local_y = inter_y1
+        local_w = inter_x2 - inter_x1
+        local_h = inter_y2 - inter_y1
+
+        if translate:
+            local_x -= ox
+            local_y -= oy
+
+        return ScreenRect(local_x, local_y, local_w, local_h)
 
 
 @dataclass

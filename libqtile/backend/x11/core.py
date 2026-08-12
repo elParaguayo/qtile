@@ -17,6 +17,7 @@ from libqtile.backend.x11 import window, xcbq
 from libqtile.backend.x11.idle_notify import IdleNotifier
 from libqtile.backend.x11.xkeysyms import keysyms
 from libqtile.command.base import expose_command
+from libqtile.config import ScreenRect
 from libqtile.log_utils import logger
 from libqtile.utils import QtileError
 
@@ -954,3 +955,9 @@ class Core(base.Core):
     @expose_command
     def idle_notify_activity(self) -> None:
         self._fake_input(xcbq.XCB_MOTION_NOTIFY, 0, 0, 0)
+
+    def set_window_clipping(self, window: Window, area: ScreenRect | tuple[int, int, int, int] | None, border_width: int) -> None:
+        if area is None:
+            self.conn.shape.clear_clip(window)
+        else:
+            self.conn.shape.set_clip(window, area, border_width)

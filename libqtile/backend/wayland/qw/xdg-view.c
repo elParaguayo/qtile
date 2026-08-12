@@ -191,14 +191,21 @@ static void qw_xdg_view_clip(struct qw_xdg_view *xdg_view) {
         return;
     }
 
-    // clang-format off
-    struct wlr_box clip = {
-        .x = xdg_view->geom.x,
-        .y = xdg_view->geom.y,
-        .width = xdg_view->base.width,
-        .height = xdg_view->base.height
-    };
-    // clang-format on
+    struct wlr_box clip;
+    if (xdg_view->base.has_clip) {
+        clip = xdg_view->base.clip_box;
+        clip.x += xdg_view->geom.x - xdg_view->base.clip_offset;
+        clip.y += xdg_view->geom.y - xdg_view->base.clip_offset;
+
+    } else {
+        // Default to geometry bounding box
+        clip = (struct wlr_box){
+            .x = xdg_view->geom.x,
+            .y = xdg_view->geom.y,
+            .width = xdg_view->base.width,
+            .height = xdg_view->base.height,
+        };
+    }
 
     // Apply clipping to subsurface tree
     wlr_scene_subsurface_tree_set_clip(&xdg_view->scene_tree->node, &clip);
@@ -242,17 +249,17 @@ static void qw_xdg_view_place(void *self, int x, int y, int width, int height,
     // Set position of the content scene node
     wlr_scene_node_set_position(&xdg_view->base.content_tree->node, x, y);
 
-    if (needs_repos) {
+    if (needs_repos || xdg_view->base.has_clip) {
         // Resize the toplevel surface and apply clipping if needed
         wlr_xdg_toplevel_set_size(xdg_view->xdg_toplevel, width, height);
         qw_xdg_view_clip(xdg_view);
-
+        
         qw_view_update_ftl_outputs(&xdg_view->base, xdg_view->xdg_toplevel->base->surface);
     }
-
+    
     // Paint borders around the view with given border colors and width
     qw_view_paint_borders((struct qw_view *)xdg_view, borders, border_count);
-
+    
     // Raise view if requested
     if (above != 0) {
         qw_view_raise_to_top(&xdg_view->base);

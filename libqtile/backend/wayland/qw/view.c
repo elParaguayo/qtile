@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <wayland-util.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/util/log.h>
 
 // Frees all border rectangles and their associated scene nodes of the view.
 // Checks if borders exist, then destroys each of the 4 border scene nodes per border set.
@@ -187,6 +188,11 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
 
     qw_view_cleanup_borders(view);
 
+    if (border_count <= 0 || !borders) {
+        wlr_scene_node_set_position(tree_node, 0, 0);
+        return;
+    }
+
     view->borders = calloc(border_count, sizeof(*view->borders));
     if (!view->borders) {
         wlr_log(WLR_ERROR, "Failed to allocate border layer tracking");
@@ -204,50 +210,73 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
     int outer_w = view->width + total_width * 2;
     int outer_h = view->height + total_width * 2;
 
+    // wlr_log(WLR_INFO, "[Border Debug] View has_clip=%d | clip_box=(%d, %d, %d, %d) | view_size=(%dx%d) | outer_size=(%dx%d)",
+    //         view->has_clip,
+    //         view->clip_box.x, view->clip_box.y, view->clip_box.width, view->clip_box.height,
+    //         view->width, view->height, outer_w, outer_h);
+
     int coord = 0;
     for (int i = 0; i < border_count; i++) {
         const struct qw_border *src = &borders[i];
-        view->borders[i].type = src->type;
+        typeof(*view->borders) *dst = &view->borders[i];
+
+        dst->type = src->type;
+        dst->width = src->width;
 
         int bw = src->width;
-        view->borders[i].width = bw;
 
-        // clang-format off
-        struct wlr_box sides[4] = {
-            { coord, coord, outer_w - coord * 2, bw },                              // top
-            { outer_w - bw - coord, bw + coord, bw, outer_h - 2 * bw - coord * 2 }, // right
-            { coord, outer_h - bw - coord, outer_w - coord * 2, bw },               // bottom
-            { coord, bw + coord, bw, outer_h - 2 * bw - coord * 2 },                // left
+        struct wlr_box base_sides[4] = {
+            { coord, coord, outer_w - coord * 2, bw },
+            { outer_w - bw - coord, coord, bw, outer_h - coord * 2 },
+            { coord, outer_h - bw - coord, outer_w - coord * 2, bw },
+            { coord, coord, bw, outer_h - coord * 2 },
         };
-        // clang-format on
 
-        if (src->type == QW_BORDER_RECT) {
-            for (int j = 0; j < 4; j++) {
+        for (int j = 0; j < 4; j++) {
+            struct wlr_box final_side = base_sides[j];
+
+            if (view->has_clip && !wlr_box_intersection(&final_side, &base_sides[j], &view->clip_box)) {
+                    continue;
+                }
+
+            if (src->type == QW_BORDER_RECT) {
+                for (int c = 0; c < 4; c++) {
+                    dst->color[j][c] = src->rect.color[j][c];
+                }
+
                 float rect_color[4];
-                qw_util_premultiply_rgba(src->rect.color[j], view->opacity, rect_color);
+                qw_util_premultiply_rgba(dst->color[j], view->opacity, rect_color);
+
                 struct wlr_scene_rect *rect = wlr_scene_rect_create(
-                    view->content_tree, sides[j].width, sides[j].height, rect_color);
+                    view->content_tree, final_side.width, final_side.height, rect_color);
                 if (!rect) {
                     wlr_log(WLR_ERROR, "Failed to create scene_rect for border");
                     continue;
                 }
-                wlr_scene_node_set_position(&rect->node, sides[j].x, sides[j].y);
-                view->borders[i].rects[j] = rect;
-            }
-            // Store the original colour in the border so we can update if window opacity changes
-            memcpy(view->borders[i].color, src->rect.color, sizeof(view->borders[i].color));
+                wlr_scene_node_set_position(&rect->node, final_side.x, final_side.y);
+                dst->rects[j] = rect;
 
-        } else if (src->type == QW_BORDER_BUFFER) {
-            cairo_surface_t *surface = src->buffer.surface;
-            struct wlr_scene_buffer **buffers =
-                create_scene_buffers_from_surface(view->content_tree, surface, sides, 4);
+                int abs_x = 0, abs_y = 0;
+                wlr_scene_node_coords(&rect->node, &abs_x, &abs_y);
+                // wlr_log(WLR_INFO, "[Border Debug] Layer %d Side %d (RECT) | Local Position=(%d, %d) | Abs Scene Coords=(%d, %d) | Rendered Size=(%dx%d)",
+                //         i, j, rect->node.x, rect->node.y, abs_x, abs_y, final_side.width, final_side.height);
 
-            for (int j = 0; j < 4; j++) {
-                if (!buffers[j]) {
-                    continue;
+            } else if (src->type == QW_BORDER_BUFFER) {
+                cairo_surface_t *surface = src->buffer.surface;
+                struct wlr_scene_buffer **buffers = create_scene_buffers_from_surface(
+                    view->content_tree, surface, &final_side, 1);
+
+                if (buffers && buffers[0]) {
+                    wlr_scene_node_set_position(&buffers[0]->node, final_side.x, final_side.y);
+                    dst->scene_bufs[j] = buffers[0];
+
+                    int abs_x = 0, abs_y = 0;
+                    wlr_scene_node_coords(&buffers[0]->node, &abs_x, &abs_y);
+                    wlr_log(WLR_INFO, "[Border Debug] Layer %d Side %d (BUFFER) | Local Position=(%d, %d) | Abs Scene Coords=(%d, %d) | Rendered Size=(%dx%d)",
+                            i, j, buffers[0]->node.x, buffers[0]->node.y, abs_x, abs_y, final_side.width, final_side.height);
+
+                    free(buffers);
                 }
-                wlr_scene_node_set_position(&buffers[j]->node, sides[j].x, sides[j].y);
-                view->borders[i].scene_bufs[j] = buffers[j];
             }
         }
 
@@ -413,26 +442,36 @@ static void qw_set_node_opacity(struct wlr_scene_node *node, float opacity) {
 }
 
 void qw_view_set_opacity(struct qw_view *view, float opacity) {
-    if (view->content_tree) {
-        struct wlr_scene_node *node_ptr = &view->content_tree->node;
-        qw_set_node_opacity(node_ptr, opacity);
-        view->opacity = opacity;
+    if (!view) {
+        return;
     }
 
-    // Update border opacity
+    view->opacity = opacity;
+
+    // 1. Update the client content scene tree/buffer opacity
+    struct wlr_scene_node *node = view->get_tree_node(view);
+    if (node) {
+        qw_set_node_opacity(node, opacity);
+    }
+
+    // 2. Update border rect colors (premultiplying with new opacity)
+    if (!view->borders) {
+        return;
+    }
+
     for (int i = 0; i < view->border_count; i++) {
-        // Current border layer
         typeof(*view->borders) *border = &view->borders[i];
 
-        for (int side = 0; side < 4; side++) {
+        if (border->type == QW_BORDER_RECT) {
+            for (int j = 0; j < 4; j++) {
+                // Guard against NULL pointers for clipped-out sides
+                if (!border->rects[j]) {
+                    continue;
+                }
 
-            if (border->type == QW_BORDER_RECT) {
-                float *color = border->color[side];
-                struct wlr_scene_rect *rect = border->rects[side];
-
-                float new_color[4];
-                qw_util_premultiply_rgba(color, view->opacity, new_color);
-                wlr_scene_rect_set_color(rect, new_color);
+                float rect_color[4];
+                qw_util_premultiply_rgba(border->color[j], opacity, rect_color);
+                wlr_scene_rect_set_color(border->rects[j], rect_color);
             }
         }
     }
@@ -494,5 +533,35 @@ void qw_view_update_ftl_outputs(struct qw_view *view, struct wlr_surface *surfac
 
         wl_list_remove(&vo->link);
         free(vo);
+    
+    }
+}
+
+void qw_view_set_clip_area(struct qw_view *view, int x, int y, int width, int height, int border_width) {
+    if (!view) {
+        return;
+    }
+
+    view->has_clip = true;
+    view->clip_box = (struct wlr_box){
+        .x = x,
+        .y = y,
+        .width = width,
+        .height = height,
+    };
+    view->clip_offset = border_width;
+}
+
+void qw_view_clear_clip_area(struct qw_view *view) {
+    if (!view) {
+        return;
+    }
+
+    view->has_clip = false;
+    view->clip_offset = 0;
+
+    struct wlr_scene_node *content_node = view->get_tree_node(view);
+    if (content_node) {
+        wlr_scene_subsurface_tree_set_clip(content_node, NULL);
     }
 }

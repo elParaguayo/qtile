@@ -8,6 +8,7 @@ from libqtile import config, hook
 from libqtile.backend.base import Drawer
 from libqtile.backend.base.float_states import FloatStates
 from libqtile.command.base import CommandError, CommandObject, ItemT, expose_command
+from libqtile.config import ScreenRect
 from libqtile.group import _Group
 from libqtile.log_utils import logger
 from libqtile.scratchpad import ScratchPad
@@ -122,6 +123,7 @@ class _Window(CommandObject, metaclass=ABCMeta):
         above=False,
         margin=None,
         respect_hints=False,
+        clip=None,
     ):
         """Place the window in the given position."""
 
@@ -650,6 +652,14 @@ class Window(_Window, metaclass=ABCMeta):
     def remove_idle_inhibitor(self) -> None:
         """Remove inhibitor rule for this window."""
         self.qtile.core.idle_inhibitor_manager.remove_window_inhibitor(self)
+
+    def _set_clip_area(self, area: ScreenRect | tuple[int, int, int, int] | None = None, border_width: int = 0) -> None:
+        """
+        Clip the window (and its borders) to a specific bounding rect relative to the window origin.
+
+        Pass a ScreenRect or tuple of (x, y, width, height) to set the clip area, or None to clear clipping.
+        """
+        self.qtile.core.set_window_clipping(self, area, border_width)
 
 
 class Internal(_Window, metaclass=ABCMeta):

@@ -130,6 +130,9 @@ struct qw_view {
             struct wlr_scene_buffer *scene_bufs[4];
         };
     } *borders;
+    bool has_clip;
+    struct wlr_box clip_box;
+    int clip_offset;
     struct wl_listener ftl_request_activate;
     struct wl_listener ftl_request_close;
     struct wl_listener ftl_request_maximize;
@@ -156,6 +159,10 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
 // Create/destroy a foreign toplevel manager handle and listeners
 void qw_view_ftl_manager_handle_create(struct qw_view *view);
 void qw_view_ftl_manager_handle_destroy(struct qw_view *view);
+
+// Window clipping functions
+void qw_view_set_clip_area(struct qw_view *view, int x, int y, int width, int height, int border_width);
+void qw_view_clear_clip_area(struct qw_view *view);
 
 struct qw_output *qw_view_get_primary_output(struct qw_view *view);
 

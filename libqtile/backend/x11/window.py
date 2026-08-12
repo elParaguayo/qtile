@@ -813,6 +813,7 @@ class _Window:
         above=False,
         margin=None,
         respect_hints=False,
+        clip= None
     ):
         """
         Places the window at the specified location with the given size.
@@ -855,6 +856,8 @@ class _Window:
             y += margin[0]
             width -= margin[1] + margin[3]
             height -= margin[0] + margin[2]
+
+        self._set_clip_area(clip, borderwidth)
 
         # Optionally adjust geometry to respect client hints
         if respect_hints:
