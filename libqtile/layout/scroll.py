@@ -173,7 +173,7 @@ class Scroll(base.Layout):
                 self.border_focus if win.has_focus else self.border_normal,
                 margin=self.margin,
             )
-            win.show()
+            win.unhide()
             return
 
         pos = self._get_window_position(client)
@@ -306,7 +306,7 @@ class Scroll(base.Layout):
             win_geom = ScreenRect(col_x, win_y, column_width, win_h).shrink(self.margin)
             screen_geom = screen_rect.shrink(self.margin)
             clip = screen_geom.intersects(win_geom, translate=True)
-            win.show()
+            win.unhide()
             if self._last_geometry.get(win) != geom:
                 win.place(*geom, margin=self.margin, clip=clip)
                 self._last_geometry[win] = geom
